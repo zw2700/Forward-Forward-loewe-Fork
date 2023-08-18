@@ -1,3 +1,7 @@
+# Frank's Edit
+
+This is my revised version of Sindy Löwe's implementation of the Forward-Forward Algorithm. I'll try to improve the model with a method of forward gradients described [here](https://arxiv.org/abs/2210.03310) by Prof. Mengye Ren. 
+
 # Reimplementation of the Forward-Forward Algorithm
 
 This is a reimplementation of Geoffrey Hinton's Forward-Forward Algorithm in Python/Pytorch.
