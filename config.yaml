@@ -31,3 +31,8 @@ training:
 hydra:
   run:
     dir: logs
+
+wandb:
+  project: "ff_frank"
+  entity: "zw2700"
+  tags: ["baseline"]

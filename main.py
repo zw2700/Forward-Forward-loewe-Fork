@@ -7,6 +7,8 @@ from omegaconf import DictConfig
 
 from src import utils
 
+import wandb
+
 
 def train(opt, model, optimizer):
     start_time = time.time()
@@ -32,6 +34,7 @@ def train(opt, model, optimizer):
             )
 
         utils.print_results("train", time.time() - start_time, train_results, epoch)
+        wandb.log({"train": train_results}, step=epoch)
         start_time = time.time()
 
         # Validate.
@@ -62,12 +65,15 @@ def validate_or_test(opt, model, partition, epoch=None):
             )
 
     utils.print_results(partition, time.time() - test_time, test_results, epoch=epoch)
+    if partition == "val" and epoch is not None:
+        wandb.log({partition: test_results}, step=epoch)
     model.train()
 
 
 @hydra.main(config_path=".", config_name="config", version_base=None)
 def my_main(opt: DictConfig) -> None:
     opt = utils.parse_args(opt)
+    wandb.init(project=opt.wandb.project, entity=opt.wandb.entity, tags=opt.wandb.tags)
     model, optimizer = utils.get_model_and_optimizer(opt)
     model = train(opt, model, optimizer)
     validate_or_test(opt, model, "val")
