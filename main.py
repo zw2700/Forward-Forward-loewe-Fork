@@ -22,16 +22,32 @@ def train(opt, model, optimizer):
         for inputs, labels in train_loader:
             inputs, labels = utils.preprocess_inputs(opt, inputs, labels)
 
+            # print(optimizer.param_groups[0]["params"][4].shape, optimizer.param_groups[0]["params"][6].shape)
             optimizer.zero_grad()
+            # print(optimizer.param_groups[0]["params"][4].grad, optimizer.param_groups[0]["params"][6].grad)
 
-            scalar_outputs = model(inputs, labels)
+            scalar_outputs, xs, us, jvps = model(inputs, labels)
+
+            # forward gradients
+            for block_idx in range(opt.model.num_blocks):
+                for layer_idx in range(opt.model.num_layers_per_block - 1):
+                    x,u,jvp = xs[block_idx][layer_idx],us[block_idx][layer_idx],jvps[block_idx][layer_idx]
+                    grad = torch.matmul(u.unsqueeze(1),x.unsqueeze(0))*jvp
+                    model.model[block_idx][layer_idx].weight.grad = grad
+
+            # print(optimizer.param_groups[0]["params"][4].grad, optimizer.param_groups[0]["params"][6].grad)
+
+            # backward gradients for final layers in each block
             scalar_outputs["Loss"].backward()
+            # print(optimizer.param_groups[0]["params"][4].grad, optimizer.param_groups[0]["params"][6].grad)
+            # print(len(xs),xs[1][0].shape,len(us),us[1][0].shape,jvps)
 
             optimizer.step()
 
             train_results = utils.log_results(
                 train_results, scalar_outputs, num_steps_per_epoch
             )
+            # return model
 
         utils.print_results("train", time.time() - start_time, train_results, epoch)
         wandb.log({"train": train_results}, step=epoch)
@@ -73,6 +89,7 @@ def validate_or_test(opt, model, partition, epoch=None):
 @hydra.main(config_path=".", config_name="config", version_base=None)
 def my_main(opt: DictConfig) -> None:
     opt = utils.parse_args(opt)
+    wandb.login(key=opt.wandb.key)
     wandb.init(project=opt.wandb.project, entity=opt.wandb.entity, tags=opt.wandb.tags)
     model, optimizer = utils.get_model_and_optimizer(opt)
     model = train(opt, model, optimizer)
