@@ -34,6 +34,7 @@ hydra:
     dir: logs
 
 wandb:
+  activate: False
   key: 973dbf755f0f765fb4a4b8f552915e484fd4131d
   project: "ff_frank"
   entity: "zw2700"

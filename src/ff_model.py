@@ -41,7 +41,7 @@ class FF_model(torch.nn.Module):
         # Initialize downstream classification loss.
         channels_for_classification_loss = sum(
             self.num_channels[-i] for i in range(self.opt.model.num_blocks - 1)
-        )
+        ) if self.opt.model.num_blocks > 1 else self.num_channels[0]
         self.linear_classifier = nn.Sequential(
             nn.Linear(channels_for_classification_loss, 10, bias=False)
         )
@@ -180,9 +180,9 @@ class FF_model(torch.nn.Module):
             us.append(block_us.copy())
             jvps.append(block_jvps.copy())
 
-        # scalar_outputs = self.forward_downstream_classification_model(
-        #     inputs, labels, scalar_outputs=scalar_outputs
-        # )
+        scalar_outputs = self.forward_downstream_classification_model(
+            inputs, labels, scalar_outputs=scalar_outputs
+        )
 
         return scalar_outputs, xs, us, jvps
 
@@ -207,7 +207,7 @@ class FF_model(torch.nn.Module):
                     z = self.act_fn.apply(z)
                     z = self._layer_norm(z)
 
-                if block_idx >= 1:
+                if block_idx >= 1 or self.opt.model.num_blocks == 1:
                     input_classification_model.append(z)
 
         input_classification_model = torch.concat(input_classification_model, dim=-1)

@@ -44,12 +44,15 @@ def train(opt, model, optimizer):
             # return model
 
         utils.print_results("train", time.time() - start_time, train_results, epoch)
-        wandb.log({"train": train_results}, step=epoch)
+        if opt.wandb.activate:
+            wandb.log({"train": train_results}, step=epoch)
         start_time = time.time()
 
         # Validate.
         if epoch % opt.training.val_idx == 0 and opt.training.val_idx != -1:
             validate_or_test(opt, model, "val", epoch=epoch)
+        
+        # return model
 
     return model
 
@@ -75,7 +78,7 @@ def validate_or_test(opt, model, partition, epoch=None):
             )
 
     utils.print_results(partition, time.time() - test_time, test_results, epoch=epoch)
-    if partition == "val" and epoch is not None:
+    if partition == "val" and epoch is not None and opt.wandb.activate:
         wandb.log({partition: test_results}, step=epoch)
     model.train()
 
@@ -83,14 +86,15 @@ def validate_or_test(opt, model, partition, epoch=None):
 @hydra.main(config_path=".", config_name="config", version_base=None)
 def my_main(opt: DictConfig) -> None:
     opt = utils.parse_args(opt)
-    # wandb.login(key=opt.wandb.key)
-    # wandb.init(project=opt.wandb.project, entity=opt.wandb.entity, tags=opt.wandb.tags)
+    if opt.wandb.activate:
+        wandb.login(key=opt.wandb.key)
+        wandb.init(project=opt.wandb.project, entity=opt.wandb.entity, tags=opt.wandb.tags)
     model, optimizer = utils.get_model_and_optimizer(opt)
     model = train(opt, model, optimizer)
-    # validate_or_test(opt, model, "val")
+    validate_or_test(opt, model, "val")
 
-    # if opt.training.final_test:
-    #     validate_or_test(opt, model, "test")
+    if opt.training.final_test:
+        validate_or_test(opt, model, "test")
 
 
 if __name__ == "__main__":
