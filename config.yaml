@@ -10,8 +10,8 @@ model:
   peer_normalization: 0.03
   momentum: 0.9  # Momentum to use for the running mean in peer normalization loss.
 
-  hidden_dim: 2000
-  num_blocks: 4
+  hidden_dim: 500
+  num_blocks: 1
   num_layers_per_block: 2
 
 

@@ -99,69 +99,90 @@ class FF_model(torch.nn.Module):
         }
 
         # Concatenate positive and negative samples and create corresponding labels.
-        z = torch.cat([inputs["pos_images"], inputs["neg_images"]], dim=0)
-        posneg_labels = torch.zeros(z.shape[0], device=self.opt.device)
+        x = torch.cat([inputs["pos_images"], inputs["neg_images"]], dim=0)
+        posneg_labels = torch.zeros(x.shape[0], device=self.opt.device)
         posneg_labels[: self.opt.input.batch_size] = 1
 
         xs,us,jvps = [],[],[]
 
-        z = z.reshape(z.shape[0], -1)
-        z = self._layer_norm(z)
+        x = x.reshape(x.shape[0], -1)
+        x = self._layer_norm(x)
 
-        # define partial functions for jvp calculation
-        def f(z, block_idx, layer_idx):
-            z = self.act_fn.apply(z)
-            while layer_idx + 1 < self.opt.model.num_layers_per_block:
-                layer_idx += 1
-                z = self._layer_norm(z)
-                z = self.model[block_idx][layer_idx](z)
-                z = self.act_fn.apply(z)
-            z = self._calc_ff_loss(z, posneg_labels)[0] \
-                    + self.opt.model.peer_normalization * self._calc_peer_normalization_loss(block_idx, z)
-            return z
+        # define partial functions for jvp calculation (for future)
+        # def f(z, block_idx, layer_idx):
+        #     z = self.act_fn.apply(z)
+        #     while layer_idx + 1 < self.opt.model.num_layers_per_block:
+        #         layer_idx += 1
+        #         z = self._layer_norm(z)
+        #         z = self.model[block_idx][layer_idx](z)
+        #         z = self.act_fn.apply(z)
+        #     z = self._calc_ff_loss(z, posneg_labels)[0] \
+        #             + self.opt.model.peer_normalization * self._calc_peer_normalization_loss(block_idx, z)
+        #     return z
 
         for block_idx, block in enumerate(self.model):
+
             block_xs, block_us, block_jvps = [],[],[]
 
-            for layer_idx, layer in enumerate(block[:-1]):
-                block_xs.append(torch.mean(z,dim=0))
-                z = block[layer_idx](z)
-                u = torch.randn(*z.shape)
-                block_us.append(torch.mean(u,dim=0))
+            # robust multi-layer implementation (for future)
+            # for layer_idx, layer in enumerate(block[:-1]):
+            #     block_xs.append(torch.mean(z,dim=0))
+            #     z = block[layer_idx](z)
+            #     u = torch.randn(*z.shape)
+            #     block_us.append(torch.mean(u,dim=0))
 
-                # high-level jacobian-vector product
-                f_part = partial(f, block_idx=block_idx, layer_idx=layer_idx)
-                _, jvp = torch.func.jvp(f_part, (z,), (u,))
+            #     # high-level jacobian-vector product
+            #     f_part = partial(f, block_idx=block_idx, layer_idx=layer_idx)
+            #     _, jvp = torch.func.jvp(f_part, (z,), (u,))
+            #     block_jvps.append(jvp)
+
+            #     z = self.act_fn.apply(z)
+            #     z = z.detach()
+            #     z = self._layer_norm(z)
+
+            # two-layer implementation
+            block_xs.append(x)
+            z = block[0](x)
+            u = torch.randn(*z.shape)
+            block_us.append(u)
+
+            with fwAD.dual_level():
+                dual_z = fwAD.make_dual(z, u)
+                # remainder of first layer
+                dual_z = self.act_fn.apply(dual_z)
+                # print(fwAD.unpack_dual(dual_z).tangent)
+                dual_z = fwAD.make_dual(fwAD.unpack_dual(dual_z).primal.detach(),fwAD.unpack_dual(dual_z).tangent)
+                dual_z = self._layer_norm(dual_z)
+                # print(fwAD.unpack_dual(dual_z).tangent)
+
+                # second layer
+                dual_act = block[-1](dual_z)
+                dual_relu_act = self.act_fn.apply(dual_act)
+
+                # peer normalization (include later)
+                # if self.opt.model.peer_normalization > 0:
+                #     peer_loss = self._calc_peer_normalization_loss(block_idx, dual_relu_act)
+                #     scalar_outputs["Peer Normalization"] += peer_loss
+                #     scalar_outputs["Loss"] += self.opt.model.peer_normalization * peer_loss
+
+                ff_loss, ff_accuracy = self._calc_ff_loss(dual_relu_act, posneg_labels)
+                scalar_outputs[f"loss_layer_{block_idx}"] = ff_loss
+                scalar_outputs[f"ff_accuracy_layer_{block_idx}"] = ff_accuracy
+                scalar_outputs["Loss"] += ff_loss
+
+                jvp = fwAD.unpack_dual(scalar_outputs["Loss"]).tangent
                 block_jvps.append(jvp)
-
-                z = self.act_fn.apply(z)
-                z = z.detach()
-                z = self._layer_norm(z)
-
-            # final layer in the block
-            z = block[-1](z)
-            z = self.act_fn.apply(z)
-
-            if self.opt.model.peer_normalization > 0:
-                peer_loss = self._calc_peer_normalization_loss(block_idx, z)
-                scalar_outputs["Peer Normalization"] += peer_loss
-                scalar_outputs["Loss"] += self.opt.model.peer_normalization * peer_loss
-
-            ff_loss, ff_accuracy = self._calc_ff_loss(z, posneg_labels)
-            scalar_outputs[f"loss_layer_{block_idx}"] = ff_loss
-            scalar_outputs[f"ff_accuracy_layer_{block_idx}"] = ff_accuracy
-            scalar_outputs["Loss"] += ff_loss
             
-            z = z.detach()
-            z = self._layer_norm(z)
+            x = dual_relu_act.detach()
+            x = self._layer_norm(x)
 
             xs.append(block_xs.copy())
             us.append(block_us.copy())
             jvps.append(block_jvps.copy())
 
-        scalar_outputs = self.forward_downstream_classification_model(
-            inputs, labels, scalar_outputs=scalar_outputs
-        )
+        # scalar_outputs = self.forward_downstream_classification_model(
+        #     inputs, labels, scalar_outputs=scalar_outputs
+        # )
 
         return scalar_outputs, xs, us, jvps
 
@@ -217,7 +238,11 @@ class ReLU_full_grad(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        return grad_output.clone()
+        input = ctx.input
+        assert input.shape == grad_output.shape
+        grad_out = grad_output.clone()
+        grad_out[input<0] = 0
+        return grad_out
     
     @staticmethod
     def jvp(ctx, grad_input):
