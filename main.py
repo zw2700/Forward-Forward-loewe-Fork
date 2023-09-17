@@ -25,23 +25,31 @@ def train(opt, model, optimizer):
             optimizer.zero_grad()
 
             scalar_outputs, xs, us, jvps = model(inputs, labels)
+            
+            # print(optimizer.param_groups[0]["params"][1].grad, optimizer.param_groups[0]["params"][3].grad)
 
             # forward gradients
             for block_idx in range(opt.model.num_blocks):
                 for layer_idx in range(opt.model.num_layers_per_block - 1):
                     x,u,jvp = xs[block_idx][layer_idx],us[block_idx][layer_idx],jvps[block_idx][layer_idx]
-                    grad = torch.matmul(u.T,x)*jvp
-                    model.model[block_idx][layer_idx].weight.grad = grad
+                    w_grad = torch.matmul(u.T,x)*jvp
+                    b_grad = torch.matmul(u.T,torch.ones(x.shape[0], device=opt.device))*jvp
+                    model.model[block_idx][layer_idx].weight.grad = w_grad
+                    model.model[block_idx][layer_idx].bias.grad = b_grad
+            
+            # print(optimizer.param_groups[0]["params"][1].grad, optimizer.param_groups[0]["params"][3].grad)
 
             # backward gradients for final layers in each block
             scalar_outputs["Loss"].backward()
+
+            # print(optimizer.param_groups[0]["params"][1].grad, optimizer.param_groups[0]["params"][3].grad)
 
             optimizer.step()
 
             train_results = utils.log_results(
                 train_results, scalar_outputs, num_steps_per_epoch
             )
-            # return model
+            return model
 
         utils.print_results("train", time.time() - start_time, train_results, epoch)
         if opt.wandb.activate:
@@ -91,10 +99,10 @@ def my_main(opt: DictConfig) -> None:
         wandb.init(project=opt.wandb.project, entity=opt.wandb.entity, tags=opt.wandb.tags)
     model, optimizer = utils.get_model_and_optimizer(opt)
     model = train(opt, model, optimizer)
-    validate_or_test(opt, model, "val")
+    # validate_or_test(opt, model, "val")
 
-    if opt.training.final_test:
-        validate_or_test(opt, model, "test")
+    # if opt.training.final_test:
+    #     validate_or_test(opt, model, "test")
 
 
 if __name__ == "__main__":

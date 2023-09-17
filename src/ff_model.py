@@ -143,7 +143,8 @@ class FF_model(torch.nn.Module):
             # two-layer implementation
             block_xs.append(x)
             z = block[0](x)
-            u = torch.randn(*z.shape)
+            u = torch.randn(*z.shape, device=self.opt.device)
+            u[z<0] = 0
             block_us.append(u)
 
             with fwAD.dual_level():
@@ -152,6 +153,7 @@ class FF_model(torch.nn.Module):
                 dual_z = self.act_fn.apply(dual_z)
                 # print(fwAD.unpack_dual(dual_z).tangent)
                 dual_z = fwAD.make_dual(fwAD.unpack_dual(dual_z).primal.detach(),fwAD.unpack_dual(dual_z).tangent)
+                # print(fwAD.unpack_dual(dual_z).tangent.shape)
                 dual_z = self._layer_norm(dual_z)
                 # print(fwAD.unpack_dual(dual_z).tangent)
 
