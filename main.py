@@ -29,13 +29,13 @@ def train(opt, model, optimizer):
             # print(optimizer.param_groups[0]["params"][1].grad, optimizer.param_groups[0]["params"][3].grad)
 
             # forward gradients
-            for block_idx in range(opt.model.num_blocks):
-                for layer_idx in range(opt.model.num_layers_per_block - 1):
-                    x,u,jvp = xs[block_idx][layer_idx],us[block_idx][layer_idx],jvps[block_idx][layer_idx]
-                    w_grad = torch.matmul(u.T,x)*jvp
-                    b_grad = torch.matmul(u.T,torch.ones(x.shape[0], device=opt.device))*jvp
-                    model.model[block_idx][layer_idx].weight.grad = w_grad
-                    model.model[block_idx][layer_idx].bias.grad = b_grad
+            # for block_idx in range(opt.model.num_blocks):
+            #     for layer_idx in range(opt.model.num_layers_per_block - 1):
+            #         x,u,jvp = xs[block_idx][layer_idx],us[block_idx][layer_idx],jvps[block_idx][layer_idx]
+            #         w_grad = torch.matmul(u.T,x)*jvp
+            #         b_grad = torch.matmul(u.T,torch.ones(x.shape[0], device=opt.device))*jvp
+            #         model.model[block_idx][layer_idx].weight.grad = w_grad
+            #         model.model[block_idx][layer_idx].bias.grad = b_grad
             
             # print(optimizer.param_groups[0]["params"][1].grad, optimizer.param_groups[0]["params"][3].grad)
 
