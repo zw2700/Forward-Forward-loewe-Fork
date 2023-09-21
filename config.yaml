@@ -4,6 +4,9 @@ device: "cpu"  # cpu or cuda
 input:
   path: datasets
   batch_size: 100
+  dataset: CIFAR10
+  input_size: 3072
+  num_classes: 10
 
 
 model:

@@ -4,10 +4,10 @@ import torch
 from src import utils
 
 
-class FF_MNIST(torch.utils.data.Dataset):
+class FF_CIFAR10(torch.utils.data.Dataset):
     def __init__(self, opt, partition, num_classes=10):
         self.opt = opt
-        self.mnist = utils.get_MNIST_partition(opt, partition)
+        self.cifar10 = utils.get_CIFAR10_partition(opt, partition)
         self.num_classes = num_classes
         self.uniform_label = torch.ones(self.num_classes) / self.num_classes
 
@@ -25,7 +25,7 @@ class FF_MNIST(torch.utils.data.Dataset):
         return inputs, labels
 
     def __len__(self):
-        return len(self.mnist)
+        return len(self.cifar10)
 
     def _get_pos_sample(self, sample, class_label):
         one_hot_label = torch.nn.functional.one_hot(
@@ -53,8 +53,8 @@ class FF_MNIST(torch.utils.data.Dataset):
         return neutral_sample
 
     def _generate_sample(self, index):
-        # Get MNIST sample.
-        sample, class_label = self.mnist[index]
+        # Get CIFAR10 sample.
+        sample, class_label = self.cifar10[index]
         pos_sample = self._get_pos_sample(sample, class_label)
         neg_sample = self._get_neg_sample(sample, class_label)
         neutral_sample = self._get_neutral_sample(sample)

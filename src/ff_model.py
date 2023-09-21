@@ -21,7 +21,7 @@ class FF_model(torch.nn.Module):
 
         # Initialize the model.
         self.model = nn.ModuleList()
-        prev_dimension = 784
+        prev_dimension = opt.input.input_size
         for i in range(len(self.num_channels)):
             block = nn.ModuleList([nn.Linear(prev_dimension, self.num_channels[i])])
             for j in range(self.opt.model.num_layers_per_block - 1):
@@ -43,7 +43,7 @@ class FF_model(torch.nn.Module):
             self.num_channels[-i] for i in range(self.opt.model.num_blocks - 1)
         ) if self.opt.model.num_blocks > 1 else self.num_channels[0]
         self.linear_classifier = nn.Sequential(
-            nn.Linear(channels_for_classification_loss, 10, bias=False)
+            nn.Linear(channels_for_classification_loss, opt.input.num_classes, bias=False)
         )
         self.classification_loss = nn.CrossEntropyLoss()
 

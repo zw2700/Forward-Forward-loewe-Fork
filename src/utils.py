@@ -8,7 +8,7 @@ import torchvision
 from hydra.utils import get_original_cwd
 from omegaconf import OmegaConf
 
-from src import ff_mnist, ff_model
+from src import ff_mnist, ff_model, ff_cifar10
 
 
 def parse_args(opt):
@@ -53,7 +53,10 @@ def get_model_and_optimizer(opt):
 
 
 def get_data(opt, partition):
-    dataset = ff_mnist.FF_MNIST(opt, partition)
+    if opt.input.dataset == "MNIST":
+        dataset = ff_mnist.FF_MNIST(opt, partition)
+    elif opt.input.dataset == "CIFAR10":
+        dataset = ff_cifar10.FF_CIFAR10(opt, partition)
 
     # Improve reproducibility in dataloader.
     g = torch.Generator()
@@ -107,6 +110,37 @@ def get_MNIST_partition(opt, partition):
         mnist = torch.utils.data.Subset(mnist, range(50000, 60000))
 
     return mnist
+
+def get_CIFAR10_partition(opt, partition):
+    if partition in ["train", "val", "train_val"]:
+        cifar10 = torchvision.datasets.CIFAR10(
+            os.path.join(get_original_cwd(), opt.input.path),
+            train=True,
+            download=True,
+            transform=torchvision.transforms.ToTensor(),
+        )
+    elif partition in ["test"]:
+        cifar10 = torchvision.datasets.CIFAR10(
+            os.path.join(get_original_cwd(), opt.input.path),
+            train=False,
+            download=True,
+            transform=torchvision.transforms.ToTensor(),
+        )
+    else:
+        raise NotImplementedError
+
+    if partition == "train":
+        cifar10 = torch.utils.data.Subset(cifar10, range(40000))
+    elif partition == "val":
+        cifar10 = torchvision.datasets.CIFAR10(
+            os.path.join(get_original_cwd(), opt.input.path),
+            train=True,
+            download=True,
+            transform=torchvision.transforms.ToTensor(),
+        )
+        cifar10 = torch.utils.data.Subset(cifar10, range(40000, 50000))
+
+    return cifar10
 
 
 def dict_to_cuda(dict):
