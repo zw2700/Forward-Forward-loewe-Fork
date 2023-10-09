@@ -6,7 +6,6 @@ import numpy as np
 import torch
 import torchvision
 from hydra.utils import get_original_cwd
-from omegaconf import OmegaConf
 
 from src import ff_mnist, ff_model, ff_cifar10
 
@@ -16,7 +15,6 @@ def parse_args(opt):
     torch.manual_seed(opt.seed)
     random.seed(opt.seed)
 
-    print(OmegaConf.to_yaml(opt))
     return opt
 
 

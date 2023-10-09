@@ -3,7 +3,7 @@ from collections import defaultdict
 
 import hydra
 import torch
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from src import utils
 
@@ -94,9 +94,10 @@ def validate_or_test(opt, model, partition, epoch=None):
 @hydra.main(config_path=".", config_name="config", version_base=None)
 def my_main(opt: DictConfig) -> None:
     opt = utils.parse_args(opt)
+    print(OmegaConf.to_yaml(opt))
     if opt.wandb.activate:
         wandb.login(key=opt.wandb.key)
-        wandb.init(project=opt.wandb.project, entity=opt.wandb.entity, tags=opt.wandb.tags)
+        wandb.init(project=opt.wandb.project, entity=opt.wandb.entity, name=opt.wandb.name)
     model, optimizer = utils.get_model_and_optimizer(opt)
     model = train(opt, model, optimizer)
     # validate_or_test(opt, model, "val")
