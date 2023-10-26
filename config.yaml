@@ -4,8 +4,8 @@ device: "cpu"  # cpu or cuda
 input:
   path: datasets
   batch_size: 100
-  dataset: CIFAR10
-  input_size: 3072
+  dataset: MNIST
+  input_size: 784
   num_classes: 10
 
 
@@ -24,6 +24,7 @@ training:
   learning_rate: 1e-3
   weight_decay: 3e-4
   momentum: 0.9
+  dropout: 0.2
 
   downstream_learning_rate: 1e-2
   downstream_weight_decay: 3e-3

@@ -5,6 +5,7 @@ from typing import Any, Tuple
 import torch
 import torch.nn as nn
 import torch.autograd.forward_ad as fwAD
+import torch.nn.functional as F
 
 from src import utils
 
@@ -117,6 +118,8 @@ class FF_model(torch.nn.Module):
             # backward for two layers
             z = block[0](x)
             z = self.act_fn.apply(z)
+            if self.opt.training.dropout > 0:
+                z = F.dropout(z, p=self.opt.training.dropout, training=True)
             z = self._layer_norm(z)
             z = block[1](z)
             z = self.act_fn.apply(z)
