@@ -50,6 +50,7 @@ def train(opt, model, optimizer):
                 train_results, scalar_outputs, num_steps_per_epoch
             )
             return model
+            # break
 
         utils.print_results("train", time.time() - start_time, train_results, epoch)
         if opt.wandb.activate:

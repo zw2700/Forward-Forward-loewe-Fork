@@ -12,11 +12,26 @@ input:
 model:
   peer_normalization: 0.03
   momentum: 0.9  # Momentum to use for the running mean in peer normalization loss.
+  convolutional: True
+  num_blocks: 3
 
-  hidden_dim: 500
-  num_blocks: 4
-  num_layers_per_block: 2
+  fully_connected:  
+    hidden_dim: 500
+    num_layers_per_block: 2
 
+  conv:
+    output_size_1: 4
+    output_size_2: 3
+    output_size_3: 2
+    kernel_size_1: 10
+    kernel_size_2: 2
+    kernel_size_3: 2
+    stride_1: 6
+    stride_2: 1
+    stride_3: 1
+    channels_1: 128
+    channels_2: 220
+    channels_3: 512
 
 training:
   epochs: 100
