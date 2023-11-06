@@ -38,11 +38,11 @@ class FF_model(torch.nn.Module):
                                  self.opt.model.conv.channels_3 * (self.opt.model.conv.output_size_3**2)]
 
             self.model = nn.ModuleList()
-            self.model.append(nn.ModuleList([LocallyConnected2d(1,
-                                                                self.opt.model.conv.channels_1,
-                                                                self.opt.model.conv.output_size_1,
-                                                                self.opt.model.conv.kernel_size_1,
-                                                                self.opt.model.conv.stride_1)]))
+            self.model.append(nn.ModuleList([LocallyConnected2d(self.opt.model.conv.input_channels,  # in_channels
+                                                                self.opt.model.conv.channels_1,  # out_channels
+                                                                self.opt.model.conv.output_size_1, # output_size
+                                                                self.opt.model.conv.kernel_size_1,  # kernel_size
+                                                                self.opt.model.conv.stride_1)]))  # stride
             self.model.append(nn.ModuleList([LocallyConnected2d(self.opt.model.conv.channels_1,
                                                                 self.opt.model.conv.channels_2,
                                                                 self.opt.model.conv.output_size_2,
@@ -88,15 +88,25 @@ class FF_model(torch.nn.Module):
             for m in block.modules():
                 if not self.opt.model.convolutional:
                     if isinstance(m, nn.Linear):
-                        torch.nn.init.normal_(
-                            m.weight, mean=0, std=1 / math.sqrt(m.weight.shape[0])
-                        )
+                        if self.opt.training.init == "He":
+                            torch.nn.init.normal_(
+                                m.weight, mean=0, std=math.sqrt(2) / math.sqrt(m.weight.shape[0])
+                            )
+                        elif self.opt.training.init == "Xavier":
+                            torch.nn.init.normal_(
+                                m.weight, mean=0, std=math.sqrt(1) / math.sqrt(m.weight.shape[0])
+                            )
                         torch.nn.init.zeros_(m.bias)
                 else:
                     if isinstance(m, LocallyConnected2d):
-                        torch.nn.init.normal_(
-                            m.weight, mean=0, std=1 / math.sqrt(m.weight.shape[0])
-                        )
+                        if self.opt.training.init == "He":
+                            torch.nn.init.normal_(
+                                m.weight, mean=0, std=math.sqrt(2) / math.sqrt(m.weight.shape[-2]*m.weight.shape[-3]*m.weight.shape[-5])
+                            )
+                        elif self.opt.training.init == "Xavier":
+                            torch.nn.init.normal_(
+                                m.weight, mean=0, std=math.sqrt(1) / math.sqrt(m.weight.shape[-2]*m.weight.shape[-3]*m.weight.shape[-5])
+                            )
                         torch.nn.init.zeros_(m.bias)
 
         for m in self.linear_classifier.modules():

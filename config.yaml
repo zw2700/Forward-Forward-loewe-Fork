@@ -29,6 +29,7 @@ model:
     stride_1: 6
     stride_2: 1
     stride_3: 1
+    input_channels: 1
     channels_1: 128
     channels_2: 220
     channels_3: 512
@@ -40,6 +41,7 @@ training:
   weight_decay: 3e-4
   momentum: 0.9
   dropout: 0.2
+  init: He
 
   downstream_learning_rate: 1e-2
   downstream_weight_decay: 3e-3
