@@ -21,7 +21,8 @@ class FF_model(torch.nn.Module):
         self.act_fn = ReLU_full_grad()
 
         if not self.opt.model.convolutional:
-            self.num_channels = [self.opt.model.fully_connected.hidden_dim] * self.opt.model.num_blocks
+            self.num_channels = [getattr(self.opt.model.fully_connected, f"hidden_dim_{i+1}", 2000)
+                                 for i in range(self.opt.model.num_blocks)]
 
             # Initialize the model.
             self.model = nn.ModuleList()
@@ -161,6 +162,11 @@ class FF_model(torch.nn.Module):
             # two-layer implementation
 
             # backward for two layers
+            if self.opt.model.convolutional:
+                print(block_idx)
+                if block_idx > 0 and block_idx % 2 == 0:
+                    x = F.max_pool2d(x, 2, 2)  # maxpool
+
             z = block[0](x)
             z = self.act_fn.apply(z)
             if self.opt.training.dropout > 0:
@@ -247,6 +253,12 @@ class FF_model(torch.nn.Module):
 
         with torch.no_grad():
             for block_idx, block in enumerate(self.model):
+
+                if self.opt.model.convolutional:
+                    print(block_idx, z.shape)
+                    if block_idx > 0 and block_idx % 2 == 0:
+                        z = F.max_pool2d(z, 2, 2)  # maxpool
+
                 for layer_idx, layer in enumerate(block):
                     z = layer(z)
                     z = self.act_fn.apply(z)

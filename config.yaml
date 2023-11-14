@@ -4,38 +4,99 @@ device: "cpu"  # cpu or cuda
 input:
   path: datasets
   batch_size: 100
-  dataset: MNIST
-  input_size: 784
+  dataset: CIFAR10
+  input_size: 3072
   num_classes: 10
 
 
 model:
   peer_normalization: 0.03
   momentum: 0.9  # Momentum to use for the running mean in peer normalization loss.
-  convolutional: True
-  num_blocks: 3
+  convolutional: False
+  num_blocks: 10
 
   fully_connected:  
-    hidden_dim: 2000
     num_layers_per_block: 1
+    
+    hidden_dim_1: 2000
+    hidden_dim_2: 2000
+    hidden_dim_3: 1000
+    hidden_dim_4: 1000
+    hidden_dim_5: 500
+    hidden_dim_6: 500
+    hidden_dim_7: 250
+    hidden_dim_8: 250
+    hidden_dim_9: 125
+    hidden_dim_10: 125
 
   conv:
-    output_size_1: 4
-    output_size_2: 3
-    output_size_3: 2
-    kernel_size_1: 10
-    kernel_size_2: 2
-    kernel_size_3: 2
-    stride_1: 6
+    # output_size_1: 4
+    # output_size_2: 3
+    # output_size_3: 2
+    # kernel_size_1: 10
+    # kernel_size_2: 2
+    # kernel_size_3: 2
+    # stride_1: 6
+    # stride_2: 1
+    # stride_3: 1
+    # padding_1: 0
+    # padding_2: 0
+    # padding_3: 0
+    # input_channels: 1
+    # channels_1: 128
+    # channels_2: 220
+    # channels_3: 512
+    output_size_1: 32
+    output_size_2: 32
+    output_size_3: 16
+    output_size_4: 16
+    output_size_5: 8
+    output_size_6: 8
+    output_size_7: 4
+    output_size_8: 4
+    output_size_9: 2
+    output_size_10: 2
+    kernel_size_1: 3
+    kernel_size_2: 3
+    kernel_size_3: 3
+    kernel_size_4: 3
+    kernel_size_5: 3
+    kernel_size_6: 3
+    kernel_size_7: 3
+    kernel_size_8: 3
+    kernel_size_9: 3
+    kernel_size_10: 3
+    stride_1: 1
     stride_2: 1
     stride_3: 1
-    padding_1: 0
-    padding_2: 0
-    padding_3: 0
-    input_channels: 1
-    channels_1: 128
-    channels_2: 220
-    channels_3: 512
+    stride_4: 1
+    stride_5: 1
+    stride_6: 1
+    stride_7: 1
+    stride_8: 1
+    stride_9: 1
+    stride_10: 1
+    padding_1: 1
+    padding_2: 1
+    padding_3: 1
+    padding_4: 1
+    padding_5: 1
+    padding_6: 1
+    padding_7: 1
+    padding_8: 1
+    padding_9: 1
+    padding_10: 1
+    input_channels: 3
+    channels_1: 64
+    channels_2: 64
+    channels_3: 128
+    channels_4: 128
+    channels_5: 256
+    channels_6: 256
+    channels_7: 512
+    channels_8: 512
+    channels_9: 512
+    channels_10: 512
 
 training:
   epochs: 100
@@ -60,6 +121,6 @@ hydra:
 wandb:
   activate: False
   key: 973dbf755f0f765fb4a4b8f552915e484fd4131d
-  project: "ff_frank"
+  project: "ff_frank_cifar"
   entity: "zw2700"
   tags: ["baseline"]
