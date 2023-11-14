@@ -16,8 +16,8 @@ model:
   num_blocks: 3
 
   fully_connected:  
-    hidden_dim: 500
-    num_layers_per_block: 2
+    hidden_dim: 2000
+    num_layers_per_block: 1
 
   conv:
     output_size_1: 4
@@ -29,6 +29,9 @@ model:
     stride_1: 6
     stride_2: 1
     stride_3: 1
+    padding_1: 0
+    padding_2: 0
+    padding_3: 0
     input_channels: 1
     channels_1: 128
     channels_2: 220

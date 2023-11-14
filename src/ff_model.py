@@ -33,26 +33,21 @@ class FF_model(torch.nn.Module):
                 prev_dimension = self.num_channels[i]
                 self.model.append(block)
         else:
-            self.num_channels = [self.opt.model.conv.channels_1 * (self.opt.model.conv.output_size_1**2),
-                                 self.opt.model.conv.channels_2 * (self.opt.model.conv.output_size_2**2),
-                                 self.opt.model.conv.channels_3 * (self.opt.model.conv.output_size_3**2)]
+            self.num_channels = [getattr(self.opt.model.conv, f"channels_{i+1}", 1) * (getattr(self.opt.model.conv, f"output_size_{i+1}", 1)**2)
+                                 for i in range(self.opt.model.num_blocks)]
 
             self.model = nn.ModuleList()
-            self.model.append(nn.ModuleList([LocallyConnected2d(self.opt.model.conv.input_channels,  # in_channels
-                                                                self.opt.model.conv.channels_1,  # out_channels
-                                                                self.opt.model.conv.output_size_1, # output_size
-                                                                self.opt.model.conv.kernel_size_1,  # kernel_size
-                                                                self.opt.model.conv.stride_1)]))  # stride
-            self.model.append(nn.ModuleList([LocallyConnected2d(self.opt.model.conv.channels_1,
-                                                                self.opt.model.conv.channels_2,
-                                                                self.opt.model.conv.output_size_2,
-                                                                self.opt.model.conv.kernel_size_2,
-                                                                self.opt.model.conv.stride_2)]))
-            self.model.append(nn.ModuleList([LocallyConnected2d(self.opt.model.conv.channels_2,
-                                                                self.opt.model.conv.channels_3,
-                                                                self.opt.model.conv.output_size_3,
-                                                                self.opt.model.conv.kernel_size_3,
-                                                                self.opt.model.conv.stride_3)]))
+            prev_dimension = self.opt.model.conv.input_channels
+            for i in range(self.opt.model.num_blocks):
+                self.model.append(nn.ModuleList([LocallyConnected2d(prev_dimension,  # in_channels
+                                                                    getattr(self.opt.model.conv, f"channels_{i+1}", 1),     # out_channels
+                                                                    getattr(self.opt.model.conv, f"output_size_{i+1}", 1),  # output_size
+                                                                    getattr(self.opt.model.conv, f"kernel_size_{i+1}", 1),  # kernel_size
+                                                                    getattr(self.opt.model.conv, f"stride_{i+1}", 1),       # stride
+                                                                    getattr(self.opt.model.conv, f"padding_{i+1}", 1)       # padding
+                                                                    )])) 
+                prev_dimension = getattr(self.opt.model.conv, f"channels_{i+1}", 1)
+
 
         # Initialize forward-forward loss.
         self.ff_loss = nn.BCEWithLogitsLoss()
@@ -65,10 +60,10 @@ class FF_model(torch.nn.Module):
             ]
         else:
             self.running_means = [
-                torch.zeros(self.opt.model.conv.channels_1, self.opt.model.conv.output_size_1, self.opt.model.conv.output_size_1, device=self.opt.device) + 0.5,
-                torch.zeros(self.opt.model.conv.channels_2, self.opt.model.conv.output_size_2, self.opt.model.conv.output_size_2, device=self.opt.device) + 0.5,
-                torch.zeros(self.opt.model.conv.channels_3, self.opt.model.conv.output_size_3, self.opt.model.conv.output_size_3, device=self.opt.device) + 0.5
-                # for i in range(self.opt.model.num_blocks)
+                torch.zeros(getattr(self.opt.model.conv, f"channels_{i+1}", 1), 
+                            getattr(self.opt.model.conv, f"output_size_{i+1}", 1), 
+                            getattr(self.opt.model.conv, f"output_size_{i+1}", 1), device=self.opt.device) + 0.5
+                for i in range(self.opt.model.num_blocks)
             ]
 
         # Initialize downstream classification loss.
@@ -188,6 +183,8 @@ class FF_model(torch.nn.Module):
             x = z.detach()
             x = self._layer_norm(x)
 
+            print(x.shape)
+
             # forward for one layer, backward for one layer, implement later
             # block_xs.append(x)
             # z = block[0](x)
@@ -273,7 +270,7 @@ class FF_model(torch.nn.Module):
         return scalar_outputs
 
 class LocallyConnected2d(nn.Module):
-    def __init__(self, in_channels, out_channels, output_size, kernel_size, stride, bias=True):
+    def __init__(self, in_channels, out_channels, output_size, kernel_size, stride, padding, bias=True):
         super(LocallyConnected2d, self).__init__()
         output_size = _pair(output_size)
         self.weight = nn.Parameter(
@@ -284,11 +281,14 @@ class LocallyConnected2d(nn.Module):
         )
         self.kernel_size = _pair(kernel_size)
         self.stride = _pair(stride)
+        self.padding = (padding, padding, padding, padding)
         
     def forward(self, x):
         _, c, h, w = x.size()
+        x = F.pad(x, self.padding, mode='constant', value=0)
         kh, kw = self.kernel_size
         dh, dw = self.stride
+
         x = x.unfold(2, kh, dh).unfold(3, kw, dw)
         x = x.contiguous().view(*x.size()[:-2], -1)
         # Sum in in_channel and kernel_size dims
