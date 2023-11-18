@@ -26,7 +26,6 @@ def train(opt, model, optimizer):
 
             scalar_outputs, xs, us, jvps = model(inputs, labels)
             
-            # print(optimizer.param_groups[0]["params"][1].grad, optimizer.param_groups[0]["params"][3].grad)
 
             # forward gradients
             # for block_idx in range(opt.model.num_blocks):

@@ -12,7 +12,7 @@ input:
 model:
   peer_normalization: 0.03
   momentum: 0.9  # Momentum to use for the running mean in peer normalization loss.
-  convolutional: False
+  convolutional: True
   num_blocks: 10
 
   fully_connected:  
@@ -20,7 +20,7 @@ model:
     
     hidden_dim_1: 2000
     hidden_dim_2: 2000
-    hidden_dim_3: 1000
+    hidden_dim_3: 2000
     hidden_dim_4: 1000
     hidden_dim_5: 500
     hidden_dim_6: 500
@@ -30,22 +30,53 @@ model:
     hidden_dim_10: 125
 
   conv:
+    # 3 layers
     # output_size_1: 4
     # output_size_2: 3
     # output_size_3: 2
-    # kernel_size_1: 10
+    # kernel_size_1: 11
     # kernel_size_2: 2
     # kernel_size_3: 2
-    # stride_1: 6
+    # stride_1: 7
     # stride_2: 1
     # stride_3: 1
     # padding_1: 0
     # padding_2: 0
     # padding_3: 0
-    # input_channels: 1
+    # input_channels: 3
     # channels_1: 128
     # channels_2: 220
     # channels_3: 512
+
+    # 5 layers
+    # output_size_1: 28
+    # output_size_2: 24
+    # output_size_3: 8
+    # output_size_4: 6
+    # output_size_5: 2
+    # kernel_size_1: 5
+    # kernel_size_2: 5
+    # kernel_size_3: 5
+    # kernel_size_4: 5
+    # kernel_size_5: 2
+    # stride_1: 1
+    # stride_2: 1
+    # stride_3: 1
+    # stride_4: 1
+    # stride_5: 1
+    # padding_1: 0
+    # padding_2: 0
+    # padding_3: 0
+    # padding_4: 1
+    # padding_5: 0
+    # input_channels: 3
+    # channels_1: 16
+    # channels_2: 16
+    # channels_3: 64
+    # channels_4: 64
+    # channels_5: 512
+
+    # 8 layers
     output_size_1: 32
     output_size_2: 32
     output_size_3: 16
@@ -54,8 +85,6 @@ model:
     output_size_6: 8
     output_size_7: 4
     output_size_8: 4
-    output_size_9: 2
-    output_size_10: 2
     kernel_size_1: 3
     kernel_size_2: 3
     kernel_size_3: 3
@@ -64,8 +93,6 @@ model:
     kernel_size_6: 3
     kernel_size_7: 3
     kernel_size_8: 3
-    kernel_size_9: 3
-    kernel_size_10: 3
     stride_1: 1
     stride_2: 1
     stride_3: 1
@@ -74,8 +101,6 @@ model:
     stride_6: 1
     stride_7: 1
     stride_8: 1
-    stride_9: 1
-    stride_10: 1
     padding_1: 1
     padding_2: 1
     padding_3: 1
@@ -84,19 +109,15 @@ model:
     padding_6: 1
     padding_7: 1
     padding_8: 1
-    padding_9: 1
-    padding_10: 1
     input_channels: 3
-    channels_1: 64
-    channels_2: 64
-    channels_3: 128
-    channels_4: 128
-    channels_5: 256
-    channels_6: 256
-    channels_7: 512
-    channels_8: 512
-    channels_9: 512
-    channels_10: 512
+    channels_1: 10
+    channels_2: 10
+    channels_3: 20
+    channels_4: 20
+    channels_5: 40
+    channels_6: 40
+    channels_7: 80
+    channels_8: 80
 
 training:
   epochs: 100

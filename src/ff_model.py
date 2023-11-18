@@ -163,7 +163,6 @@ class FF_model(torch.nn.Module):
 
             # backward for two layers
             if self.opt.model.convolutional:
-                print(block_idx)
                 if block_idx > 0 and block_idx % 2 == 0:
                     x = F.max_pool2d(x, 2, 2)  # maxpool
 
@@ -188,8 +187,6 @@ class FF_model(torch.nn.Module):
 
             x = z.detach()
             x = self._layer_norm(x)
-
-            print(x.shape)
 
             # forward for one layer, backward for one layer, implement later
             # block_xs.append(x)
@@ -255,7 +252,6 @@ class FF_model(torch.nn.Module):
             for block_idx, block in enumerate(self.model):
 
                 if self.opt.model.convolutional:
-                    print(block_idx, z.shape)
                     if block_idx > 0 and block_idx % 2 == 0:
                         z = F.max_pool2d(z, 2, 2)  # maxpool
 
