@@ -26,7 +26,7 @@ class FF_model(torch.nn.Module):
 
             # Initialize the model.
             self.model = nn.ModuleList()
-            prev_dimension = opt.input.input_size
+            prev_dimension = opt.input.input_width * opt.input.input_height * opt.input.input_channels
             for i in range(len(self.num_channels)):
                 block = nn.ModuleList([nn.Linear(prev_dimension, self.num_channels[i])])
                 for j in range(self.opt.model.fully_connected.num_layers_per_block - 1):
@@ -38,16 +38,26 @@ class FF_model(torch.nn.Module):
                                  for i in range(self.opt.model.num_blocks)]
 
             self.model = nn.ModuleList()
-            prev_dimension = self.opt.model.conv.input_channels
+            prev_dimension = self.opt.input.input_channels
             for i in range(self.opt.model.num_blocks):
-                self.model.append(nn.ModuleList([LocallyConnected2d(prev_dimension,  # in_channels
-                                                                    getattr(self.opt.model.conv, f"channels_{i+1}", 1),     # out_channels
-                                                                    getattr(self.opt.model.conv, f"output_size_{i+1}", 1),  # output_size
-                                                                    getattr(self.opt.model.conv, f"kernel_size_{i+1}", 1),  # kernel_size
-                                                                    getattr(self.opt.model.conv, f"stride_{i+1}", 1),       # stride
-                                                                    getattr(self.opt.model.conv, f"padding_{i+1}", 1)       # padding
-                                                                    )])) 
+                # self.model.append(nn.ModuleList([LocallyConnected2d(prev_dimension,  # in_channels
+                #                                                     getattr(self.opt.model.conv, f"channels_{i+1}", 1),     # out_channels
+                #                                                     getattr(self.opt.model.conv, f"output_size_{i+1}", 1),  # output_size
+                #                                                     getattr(self.opt.model.conv, f"kernel_size_{i+1}", 1),  # kernel_size
+                #                                                     getattr(self.opt.model.conv, f"stride_{i+1}", 1),       # stride
+                #                                                     getattr(self.opt.model.conv, f"padding_{i+1}", 1)       # padding
+                #                                                     )])) 
+                self.model.append(nn.ModuleList([nn.Conv2d(prev_dimension,                                       # in_channels
+                                                        getattr(self.opt.model.conv, f"channels_{i+1}", 1),     # out_channels
+                                                        getattr(self.opt.model.conv, f"kernel_size_{i+1}", 1),  # kernel_size
+                                                        stride=getattr(self.opt.model.conv, f"stride_{i+1}", 1),       # stride
+                                                        padding=getattr(self.opt.model.conv, f"padding_{i+1}", 1)       # padding
+                                                        )]))
                 prev_dimension = getattr(self.opt.model.conv, f"channels_{i+1}", 1)
+
+        for block in self.model:
+            for layer in block:
+                print(layer.weight.shape)
 
 
         # Initialize forward-forward loss.
@@ -80,29 +90,43 @@ class FF_model(torch.nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        for block in self.model.modules():
-            for m in block.modules():
+        for block in self.model:
+            for m in block:
                 if not self.opt.model.convolutional:
                     if isinstance(m, nn.Linear):
                         if self.opt.training.init == "He":
                             torch.nn.init.normal_(
-                                m.weight, mean=0, std=math.sqrt(2) / math.sqrt(m.weight.shape[0])
+                                m.weight, mean=0, std=math.sqrt(2) / math.sqrt(m.weight.shape[1])
                             )
                         elif self.opt.training.init == "Xavier":
                             torch.nn.init.normal_(
-                                m.weight, mean=0, std=math.sqrt(1) / math.sqrt(m.weight.shape[0])
+                                m.weight, mean=0, std=math.sqrt(1) / math.sqrt(m.weight.shape[1])
                             )
                         torch.nn.init.zeros_(m.bias)
                 else:
                     if isinstance(m, LocallyConnected2d):
                         if self.opt.training.init == "He":
                             torch.nn.init.normal_(
-                                m.weight, mean=0, std=math.sqrt(2) / math.sqrt(m.weight.shape[-2]*m.weight.shape[-3]*m.weight.shape[-5])
+                                m.weight, mean=0, std=math.sqrt(2) / math.sqrt(m.weight.shape[-1]*m.weight.shape[-4])
+                                # m.weight, mean=0, std=math.sqrt(2) / math.sqrt(m.weight.shape[-2]*m.weight.shape[-3]*m.weight.shape[-5])
                             )
                         elif self.opt.training.init == "Xavier":
                             torch.nn.init.normal_(
-                                m.weight, mean=0, std=math.sqrt(1) / math.sqrt(m.weight.shape[-2]*m.weight.shape[-3]*m.weight.shape[-5])
+                                m.weight, mean=0, std=math.sqrt(1) / math.sqrt(m.weight.shape[-1]*m.weight.shape[-4])
+                                # m.weight, mean=0, std=math.sqrt(1) / math.sqrt(m.weight.shape[-2]*m.weight.shape[-3]*m.weight.shape[-5])
                             )
+                        torch.nn.init.zeros_(m.bias)
+                    elif isinstance(m, nn.Conv2d):
+                        if self.opt.training.init == "He":
+                            # torch.nn.init.normal_(
+                            #     m.weight, mean=0, std=math.sqrt(2) / math.sqrt(m.weight.shape[1] * m.weight.shape[2] * m.weight.shape[3])
+                            # )
+                            torch.nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+                        elif self.opt.training.init == "Xavier":
+                            # torch.nn.init.normal_(
+                            #     m.weight, mean=0, std=math.sqrt(1) / math.sqrt(m.weight.shape[1] * m.weight.shape[2] * m.weight.shape[3])
+                            # )
+                            torch.nn.init.xavier_normal_(m.weight)
                         torch.nn.init.zeros_(m.bias)
 
         for m in self.linear_classifier.modules():
@@ -162,9 +186,6 @@ class FF_model(torch.nn.Module):
             # two-layer implementation
 
             # backward for two layers
-            if self.opt.model.convolutional:
-                if block_idx > 0 and block_idx % 2 == 0:
-                    x = F.max_pool2d(x, 2, 2)  # maxpool
 
             z = block[0](x)
             z = self.act_fn.apply(z)
@@ -187,6 +208,10 @@ class FF_model(torch.nn.Module):
 
             x = z.detach()
             x = self._layer_norm(x)
+
+            if self.opt.model.convolutional and (block_idx+1) in self.opt.model.conv.pool:
+                x = F.max_pool2d(x, 2, 2)  # maxpool
+            print(x.shape)
 
             # forward for one layer, backward for one layer, implement later
             # block_xs.append(x)
@@ -251,10 +276,6 @@ class FF_model(torch.nn.Module):
         with torch.no_grad():
             for block_idx, block in enumerate(self.model):
 
-                if self.opt.model.convolutional:
-                    if block_idx > 0 and block_idx % 2 == 0:
-                        z = F.max_pool2d(z, 2, 2)  # maxpool
-
                 for layer_idx, layer in enumerate(block):
                     z = layer(z)
                     z = self.act_fn.apply(z)
@@ -262,6 +283,9 @@ class FF_model(torch.nn.Module):
 
                 if block_idx >= 1 or self.opt.model.num_blocks == 1:
                     input_classification_model.append(z.reshape(z.shape[0], -1))
+
+                if self.opt.model.convolutional and (block_idx+1) in self.opt.model.conv.pool:
+                    z = F.max_pool2d(z, 2, 2)  # maxpool
 
         input_classification_model = torch.concat(input_classification_model, dim=-1)
 

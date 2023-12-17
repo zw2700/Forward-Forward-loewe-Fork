@@ -14,6 +14,7 @@ def train(opt, model, optimizer):
     start_time = time.time()
     train_loader = utils.get_data(opt, "train")
     num_steps_per_epoch = len(train_loader)
+    # return model
 
     for epoch in range(opt.training.epochs):
         train_results = defaultdict(float)
