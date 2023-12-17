@@ -5,6 +5,9 @@ from datetime import timedelta
 import numpy as np
 import torch
 import torchvision
+import torchvision.transforms.v2 as transforms
+from torchvision.transforms.autoaugment import AutoAugmentPolicy
+
 from hydra.utils import get_original_cwd
 
 from src import ff_mnist, ff_model, ff_cifar10
@@ -110,35 +113,90 @@ def get_MNIST_partition(opt, partition):
     return mnist
 
 def get_CIFAR10_partition(opt, partition):
-    if partition in ["train", "val", "train_val"]:
+    # data augmentation & transformation
+    train_transform = transforms.Compose([
+            transforms.AutoAugment(AutoAugmentPolicy.CIFAR10),
+            transforms.ToImageTensor(),
+            transforms.ConvertImageDtype(torch.float32),
+            transforms.Normalize((0.424, 0.415, 0.384), (0.283, 0.278, 0.284)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomCrop(32, padding=4),
+            Cutout(n_holes=1, length=16)
+        ])
+    test_transform = transforms.Compose([
+            transforms.ToImageTensor(),
+            transforms.ConvertImageDtype(torch.float32),
+            transforms.Normalize((0.424, 0.415, 0.384), (0.283, 0.278, 0.284)),
+        ])
+    
+    if partition in ["train"]:
         cifar10 = torchvision.datasets.CIFAR10(
             os.path.join(get_original_cwd(), opt.input.path),
             train=True,
             download=True,
-            transform=torchvision.transforms.ToTensor(),
+            transform=train_transform,
         )
+        return torch.utils.data.Subset(cifar10, range(40000))
+    
+    elif partition in ["val"]:
+        cifar10 = torchvision.datasets.CIFAR10(
+            os.path.join(get_original_cwd(), opt.input.path),
+            train=True,
+            download=True,
+            transform=test_transform,
+        )
+        return torch.utils.data.Subset(cifar10, range(40000, 50000))
+    
     elif partition in ["test"]:
         cifar10 = torchvision.datasets.CIFAR10(
             os.path.join(get_original_cwd(), opt.input.path),
             train=False,
             download=True,
-            transform=torchvision.transforms.ToTensor(),
+            transform=test_transform,
         )
+        return cifar10
+    
     else:
         raise NotImplementedError
 
-    if partition == "train":
-        cifar10 = torch.utils.data.Subset(cifar10, range(40000))
-    elif partition == "val":
-        cifar10 = torchvision.datasets.CIFAR10(
-            os.path.join(get_original_cwd(), opt.input.path),
-            train=True,
-            download=True,
-            transform=torchvision.transforms.ToTensor(),
-        )
-        cifar10 = torch.utils.data.Subset(cifar10, range(40000, 50000))
+class Cutout(object):
+    '''Randomly mask out one or more patches from an image.
+    Args:
+        n_holes (int): Number of patches to cut out of each image.
+        length (int): The length (in pixels) of each square patch.
+    '''
+    def __init__(self, n_holes, length):
+        self.n_holes = n_holes
+        self.length = length
 
-    return cifar10
+    def __call__(self, img):
+        '''
+        Args:
+            img (Tensor): Tensor image of size (C, H, W).
+        Returns:
+            Tensor: Image with n_holes of dimension length x length cut out of it.
+        '''
+        h = img.size(1)
+        w = img.size(2)
+
+        mask = np.ones((h, w), np.float32)
+
+        for n in range(self.n_holes):
+            y = np.random.randint(h)
+            x = np.random.randint(w)
+
+            y1 = np.clip(y - self.length // 2, 0, h)
+            y2 = np.clip(y + self.length // 2, 0, h)
+            x1 = np.clip(x - self.length // 2, 0, w)
+            x2 = np.clip(x + self.length // 2, 0, w)
+
+            mask[y1: y2, x1: x2] = 0.
+
+        mask = torch.from_numpy(mask)
+        mask = mask.expand_as(img)
+        img = img * mask
+
+        return img
 
 
 def dict_to_cuda(dict):
