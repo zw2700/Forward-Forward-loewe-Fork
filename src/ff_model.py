@@ -55,10 +55,26 @@ class FF_model(torch.nn.Module):
                                                         )]))
                 prev_dimension = getattr(self.opt.model.conv, f"channels_{i+1}", 1)
 
-        for block in self.model:
-            for layer in block:
-                print(layer.weight.shape)
+        # Initialize decoder and pooling layers for prediction loss.
+        self.pred_loss = nn.CrossEntropyLoss()
+        self.pred_decoder = nn.Linear(opt.model.pred_decoder_size, opt.input.num_classes)
+        if "cuda" in opt.device:
+            self.pred_decoder = self.pred_decoder.cuda()
+        self.avgpools = []
+        for i in range(len(self.num_channels)):
+            reduce_factor = self.num_channels[i] // opt.model.pred_decoder_size
+            reduce_log2_factor = int(math.log2(reduce_factor))
+            if reduce_log2_factor % 2 > 0:
+                avgpool = nn.AvgPool2d(kernel_size=(2**(reduce_log2_factor//2), 2**(reduce_log2_factor//2+1)))
+            else:
+                avgpool = nn.AvgPool2d(kernel_size=(2**(reduce_log2_factor//2), 2**(reduce_log2_factor//2)))
+            if "cuda" in opt.device:
+                avgpool = avgpool.cuda()
+            self.avgpools.append(avgpool)
 
+        # for block in self.model:
+        #     for layer in block:
+        #         print(layer.weight.shape)
 
         # Initialize forward-forward loss.
         self.ff_loss = nn.BCEWithLogitsLoss()
@@ -161,6 +177,21 @@ class FF_model(torch.nn.Module):
                 / z.shape[0]
             ).item()
         return ff_loss, ff_accuracy
+    
+    def _calc_pred_loss(self, z, labels, layer_index):
+        if self.opt.model.convolutional:
+            z = self.avgpools[layer_index](z)
+            z = z.reshape(z.shape[0], -1)
+
+        z_decoded = self.pred_decoder(z)
+        pred_loss = self.pred_loss(z_decoded, labels)
+
+        with torch.no_grad():
+            pred_accuracy = (
+                torch.sum(torch.argmax(z_decoded, dim=1) == labels)
+                / z.shape[0]
+            ).item()
+        return pred_loss, pred_accuracy
 
     def forward(self, inputs, labels):
         scalar_outputs = {
@@ -168,10 +199,21 @@ class FF_model(torch.nn.Module):
             "Peer Normalization": torch.zeros(1, device=self.opt.device),
         }
 
-        # Concatenate positive and negative samples and create corresponding labels.
-        x = torch.cat([inputs["pos_images"], inputs["neg_images"]], dim=0)
-        posneg_labels = torch.zeros(x.shape[0], device=self.opt.device)
+        # # Concatenate positive and negative samples and create corresponding labels.
+        # ff_x = torch.cat([inputs["pos_images"], inputs["neg_images"]], dim=0)
+        # posneg_labels = torch.zeros(ff_x.shape[0], device=self.opt.device)
+        x = torch.cat([inputs["pos_images"], inputs["neg_images"]], dim=0)  # for FF only
+        posneg_labels = torch.zeros(x.shape[0], device=self.opt.device)  # for FF only
         posneg_labels[: self.opt.input.batch_size] = 1
+
+        # Prediction sample
+        # pred_x = inputs["prediction_sample"]
+
+        # Comcatenate samples for FF and pred
+        # x = torch.cat([ff_x, pred_x], dim=0)
+
+        # for prediction only
+        # x = inputs["prediction_sample"]
 
         xs,us,jvps = [],[],[]
 
@@ -181,7 +223,7 @@ class FF_model(torch.nn.Module):
 
         for block_idx, block in enumerate(self.model):
 
-            block_xs, block_us, block_jvps = [],[],[]
+            # block_xs, block_us, block_jvps = [],[],[]
 
             # two-layer implementation
 
@@ -194,24 +236,36 @@ class FF_model(torch.nn.Module):
             # z = self._layer_norm(z)
             # z = block[1](z)
             # z = self.act_fn.apply(z)
+                
+            # ff_z, pred_z = z[:-self.opt.input.batch_size], z[-self.opt.input.batch_size:]
+                
+            # prediction loss
+            # pred_loss, pred_accuracy = self._calc_pred_loss(pred_z, labels["class_labels"], block_idx)
+            # # pred_loss, pred_accuracy = self._calc_pred_loss(z, labels["class_labels"], block_idx)  # for prediction only
+            # scalar_outputs[f"pred_loss_layer_{block_idx}"] = pred_loss
+            # scalar_outputs[f"pred_accuracy_layer_{block_idx}"] = pred_accuracy
+            # scalar_outputs["Loss"] += (1-self.opt.training.sim_pred.beta) * pred_loss
 
-            # peer normalization
+            # peer normalization loss
             if self.opt.model.peer_normalization > 0:
-                peer_loss = self._calc_peer_normalization_loss(block_idx, z)
+                # peer_loss = self._calc_peer_normalization_loss(block_idx, ff_z)
+                peer_loss = self._calc_peer_normalization_loss(block_idx, z)  # for FF only
                 scalar_outputs["Peer Normalization"] += peer_loss
                 scalar_outputs["Loss"] += self.opt.model.peer_normalization * peer_loss
 
-            ff_loss, ff_accuracy = self._calc_ff_loss(z, posneg_labels)
+            # FF loss
+            # ff_loss, ff_accuracy = self._calc_ff_loss(ff_z, posneg_labels)
+            ff_loss, ff_accuracy = self._calc_ff_loss(z, posneg_labels)  # for FF only
             scalar_outputs[f"loss_layer_{block_idx}"] = ff_loss
             scalar_outputs[f"ff_accuracy_layer_{block_idx}"] = ff_accuracy
-            scalar_outputs["Loss"] += ff_loss
+            scalar_outputs["Loss"] += self.opt.training.sim_pred.beta * ff_loss
+            print("ff",ff_loss)
 
             x = z.detach()
             x = self._layer_norm(x)
 
             if self.opt.model.convolutional and (block_idx+1) in self.opt.model.conv.pool:
                 x = F.max_pool2d(x, 2, 2)  # maxpool
-            print(x.shape)
 
             # forward for one layer, backward for one layer, implement later
             # block_xs.append(x)
@@ -266,7 +320,7 @@ class FF_model(torch.nn.Module):
                 "Loss": torch.zeros(1, device=self.opt.device),
             }
 
-        z = inputs["neutral_sample"]
+        z = inputs["prediction_sample"]
         if not self.opt.model.convolutional:
             z = z.reshape(z.shape[0], -1)
         z = self._layer_norm(z)

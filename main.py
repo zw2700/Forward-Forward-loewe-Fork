@@ -26,7 +26,6 @@ def train(opt, model, optimizer):
             optimizer.zero_grad()
 
             scalar_outputs, xs, us, jvps = model(inputs, labels)
-            
 
             # forward gradients
             # for block_idx in range(opt.model.num_blocks):
@@ -42,7 +41,10 @@ def train(opt, model, optimizer):
             # backward gradients for final layers in each block
             scalar_outputs["Loss"].backward()
 
-            # print(optimizer.param_groups[0]["params"][1].grad, optimizer.param_groups[0]["params"][3].grad)
+            for p in optimizer.param_groups[0]["params"]:
+                if p.grad is not None:
+                    print(p.grad.shape, torch.linalg.norm(p.grad))
+
 
             optimizer.step()
 

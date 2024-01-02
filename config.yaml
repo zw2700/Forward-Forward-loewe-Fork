@@ -17,6 +17,7 @@ model:
   momentum: 0.9  # Momentum to use for the running mean in peer normalization loss.
   convolutional: True
   num_blocks: 10
+  pred_decoder_size: 8192
 
   fully_connected:  
     num_layers_per_block: 1
@@ -191,6 +192,8 @@ training:
   momentum: 0.9
   dropout: 0.2
   init: He
+  sim_pred:
+    beta: 1  # 1 means only unsupervised loss, 0 means only prediction loss.
 
   downstream_learning_rate: 1e-2
   downstream_weight_decay: 3e-3
