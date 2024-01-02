@@ -12,7 +12,7 @@ class FF_MNIST(torch.utils.data.Dataset):
         self.uniform_label = torch.ones(self.num_classes) / self.num_classes
 
     def __getitem__(self, index):
-        pos_sample, neg_sample, neutral_sample, class_label = self._generate_sample(
+        pos_sample, neg_sample, neutral_sample, prediction_sample, class_label = self._generate_sample(
             index
         )
 
@@ -20,6 +20,7 @@ class FF_MNIST(torch.utils.data.Dataset):
             "pos_images": pos_sample,
             "neg_images": neg_sample,
             "neutral_sample": neutral_sample,
+            "prediction_sample": prediction_sample,
         }
         labels = {"class_labels": class_label}
         return inputs, labels
@@ -51,6 +52,9 @@ class FF_MNIST(torch.utils.data.Dataset):
         neutral_sample = sample.clone()
         neutral_sample[:, 0, : self.num_classes] = self.uniform_label
         return neutral_sample
+    
+    def _get_prediction_sample(self, sample):
+        return sample.clone()
 
     def _generate_sample(self, index):
         # Get MNIST sample.
@@ -58,4 +62,5 @@ class FF_MNIST(torch.utils.data.Dataset):
         pos_sample = self._get_pos_sample(sample, class_label)
         neg_sample = self._get_neg_sample(sample, class_label)
         neutral_sample = self._get_neutral_sample(sample)
-        return pos_sample, neg_sample, neutral_sample, class_label
+        prediction_sample = self._get_prediction_sample(sample)
+        return pos_sample, neg_sample, neutral_sample, prediction_sample, class_label
