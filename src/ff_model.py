@@ -26,6 +26,7 @@ class FF_model(torch.nn.Module):
 
             # Initialize the model.
             self.model = nn.ModuleList()
+            self.bn = []
             prev_dimension = opt.input.input_width * opt.input.input_height * opt.input.input_channels
             for i in range(len(self.num_channels)):
                 block = nn.ModuleList([nn.Linear(prev_dimension, self.num_channels[i])])
@@ -33,11 +34,13 @@ class FF_model(torch.nn.Module):
                     block.append(nn.Linear(self.num_channels[i], self.num_channels[i]))
                 prev_dimension = self.num_channels[i]
                 self.model.append(block)
+                self.bn.append(nn.BatchNorm1d(self.num_channels[i]))
         else:
             self.num_channels = [getattr(self.opt.model.conv, f"channels_{i+1}", 1) * (getattr(self.opt.model.conv, f"output_size_{i+1}", 1)**2)
                                  for i in range(self.opt.model.num_blocks)]
 
             self.model = nn.ModuleList()
+            self.bn = []
             prev_dimension = self.opt.input.input_channels
             for i in range(self.opt.model.num_blocks):
                 # self.model.append(nn.ModuleList([LocallyConnected2d(prev_dimension,  # in_channels
@@ -53,24 +56,30 @@ class FF_model(torch.nn.Module):
                                                         stride=getattr(self.opt.model.conv, f"stride_{i+1}", 1),       # stride
                                                         padding=getattr(self.opt.model.conv, f"padding_{i+1}", 1)       # padding
                                                         )]))
+                self.bn.append(nn.BatchNorm2d(getattr(self.opt.model.conv, f"channels_{i+1}", 1)))
                 prev_dimension = getattr(self.opt.model.conv, f"channels_{i+1}", 1)
+
+        if "cuda" in opt.device:
+            for batchnorm in self.bn:
+                batchnorm = batchnorm.cuda()
 
         # Initialize decoder and pooling layers for prediction loss.
         self.pred_loss = nn.CrossEntropyLoss()
         self.pred_decoder = nn.Linear(opt.model.pred_decoder_size, opt.input.num_classes)
         if "cuda" in opt.device:
             self.pred_decoder = self.pred_decoder.cuda()
-        self.avgpools = []
-        for i in range(len(self.num_channels)):
-            reduce_factor = self.num_channels[i] // opt.model.pred_decoder_size
-            reduce_log2_factor = int(math.log2(reduce_factor))
-            if reduce_log2_factor % 2 > 0:
-                avgpool = nn.AvgPool2d(kernel_size=(2**(reduce_log2_factor//2), 2**(reduce_log2_factor//2+1)))
-            else:
-                avgpool = nn.AvgPool2d(kernel_size=(2**(reduce_log2_factor//2), 2**(reduce_log2_factor//2)))
-            if "cuda" in opt.device:
-                avgpool = avgpool.cuda()
-            self.avgpools.append(avgpool)
+        if self.opt.model.convolutional:
+            self.avgpools = []
+            for i in range(len(self.num_channels)):
+                reduce_factor = self.num_channels[i] // opt.model.pred_decoder_size
+                reduce_log2_factor = int(math.log2(reduce_factor))
+                if reduce_log2_factor % 2 > 0:
+                    avgpool = nn.AvgPool2d(kernel_size=(2**(reduce_log2_factor//2), 2**(reduce_log2_factor//2+1)))
+                else:
+                    avgpool = nn.AvgPool2d(kernel_size=(2**(reduce_log2_factor//2), 2**(reduce_log2_factor//2)))
+                if "cuda" in opt.device:
+                    avgpool = avgpool.cuda()
+                self.avgpools.append(avgpool)
 
         # for block in self.model:
         #     for layer in block:
@@ -168,7 +177,10 @@ class FF_model(torch.nn.Module):
     def _calc_ff_loss(self, z, labels):
         sum_of_squares = torch.sum(z ** 2, dim=list(range(1,len(z.shape))))
 
-        logits = sum_of_squares - z.reshape(len(z),-1).shape[1]
+        logits = sum_of_squares - (z.reshape(len(z),-1).shape[1] * 0.625)
+        # logits = sum_of_squares - z.reshape(len(z),-1).shape[1]
+        # print(z.shape, torch.mean(sum_of_squares))
+        # print(logits)
         ff_loss = self.ff_loss(logits, labels.float())
 
         with torch.no_grad():
@@ -199,21 +211,26 @@ class FF_model(torch.nn.Module):
             "Peer Normalization": torch.zeros(1, device=self.opt.device),
         }
 
-        # # Concatenate positive and negative samples and create corresponding labels.
-        # ff_x = torch.cat([inputs["pos_images"], inputs["neg_images"]], dim=0)
-        # posneg_labels = torch.zeros(ff_x.shape[0], device=self.opt.device)
-        x = torch.cat([inputs["pos_images"], inputs["neg_images"]], dim=0)  # for FF only
-        posneg_labels = torch.zeros(x.shape[0], device=self.opt.device)  # for FF only
-        posneg_labels[: self.opt.input.batch_size] = 1
+        if self.opt.training.sim_pred.beta == 1:  # FF only
+            x = torch.cat([inputs["pos_images"], inputs["neg_images"]], dim=0)  # for FF only
+            posneg_labels = torch.zeros(x.shape[0], device=self.opt.device)  # for FF only
+            # posneg_labels[: self.opt.input.batch_size] = 1  # for maximizing goodness for positive samples
+            posneg_labels[self.opt.input.batch_size:] = 1  # for minimizing goodness for positive samples
+        elif self.opt.training.sim_pred.beta == 0:  # prediction only
+            x = inputs["prediction_sample"]
+        else:  # simpred
+            # Concatenate positive and negative samples and create corresponding labels.
+            ff_x = torch.cat([inputs["pos_images"], inputs["neg_images"]], dim=0)
+            posneg_labels = torch.zeros(ff_x.shape[0], device=self.opt.device)
+            posneg_labels[: self.opt.input.batch_size] = 1
 
-        # Prediction sample
-        # pred_x = inputs["prediction_sample"]
+            # Prediction sample
+            pred_x = inputs["prediction_sample"]
 
-        # Comcatenate samples for FF and pred
-        # x = torch.cat([ff_x, pred_x], dim=0)
+            # Comcatenate samples for FF and pred
+            x = torch.cat([ff_x, pred_x], dim=0)
 
-        # for prediction only
-        # x = inputs["prediction_sample"]
+        print(x.shape)
 
         xs,us,jvps = [],[],[]
 
@@ -230,6 +247,7 @@ class FF_model(torch.nn.Module):
             # backward for two layers
 
             z = block[0](x)
+            z = self.bn[block_idx](z)
             z = self.act_fn.apply(z)
             if self.opt.training.dropout > 0:
                 z = F.dropout(z, p=self.opt.training.dropout, training=True)
@@ -237,29 +255,36 @@ class FF_model(torch.nn.Module):
             # z = block[1](z)
             # z = self.act_fn.apply(z)
                 
-            # ff_z, pred_z = z[:-self.opt.input.batch_size], z[-self.opt.input.batch_size:]
+            if 0 < self.opt.training.sim_pred.beta < 1:  # simpred, separate FF and pred inputs
+                ff_z, pred_z = z[:-self.opt.input.batch_size], z[-self.opt.input.batch_size:]
                 
-            # prediction loss
-            # pred_loss, pred_accuracy = self._calc_pred_loss(pred_z, labels["class_labels"], block_idx)
-            # # pred_loss, pred_accuracy = self._calc_pred_loss(z, labels["class_labels"], block_idx)  # for prediction only
-            # scalar_outputs[f"pred_loss_layer_{block_idx}"] = pred_loss
-            # scalar_outputs[f"pred_accuracy_layer_{block_idx}"] = pred_accuracy
-            # scalar_outputs["Loss"] += (1-self.opt.training.sim_pred.beta) * pred_loss
+            if self.opt.training.sim_pred.beta < 1:  # prediction loss, pred or simpred
+                if self.opt.training.sim_pred.beta > 0:
+                    pred_loss, pred_accuracy = self._calc_pred_loss(pred_z, labels["class_labels"], block_idx)
+                else:
+                    pred_loss, pred_accuracy = self._calc_pred_loss(z, labels["class_labels"], block_idx)  # for prediction only
+                scalar_outputs[f"pred_loss_layer_{block_idx}"] = pred_loss
+                scalar_outputs[f"pred_accuracy_layer_{block_idx}"] = pred_accuracy
+                scalar_outputs["Loss"] += (1-self.opt.training.sim_pred.beta) * pred_loss
 
-            # peer normalization loss
-            if self.opt.model.peer_normalization > 0:
-                # peer_loss = self._calc_peer_normalization_loss(block_idx, ff_z)
-                peer_loss = self._calc_peer_normalization_loss(block_idx, z)  # for FF only
-                scalar_outputs["Peer Normalization"] += peer_loss
-                scalar_outputs["Loss"] += self.opt.model.peer_normalization * peer_loss
+            if self.opt.training.sim_pred.beta > 0:  # peer normalization & FF loss, ff or simpred
+                # peer normalization loss
+                if self.opt.model.peer_normalization > 0:
+                    if self.opt.training.sim_pred.beta < 1:
+                        peer_loss = self._calc_peer_normalization_loss(block_idx, ff_z)
+                    else:
+                        peer_loss = self._calc_peer_normalization_loss(block_idx, z)  # for FF only
+                    scalar_outputs["Peer Normalization"] += peer_loss
+                    scalar_outputs["Loss"] += self.opt.model.peer_normalization * peer_loss
 
-            # FF loss
-            # ff_loss, ff_accuracy = self._calc_ff_loss(ff_z, posneg_labels)
-            ff_loss, ff_accuracy = self._calc_ff_loss(z, posneg_labels)  # for FF only
-            scalar_outputs[f"loss_layer_{block_idx}"] = ff_loss
-            scalar_outputs[f"ff_accuracy_layer_{block_idx}"] = ff_accuracy
-            scalar_outputs["Loss"] += self.opt.training.sim_pred.beta * ff_loss
-            print("ff",ff_loss)
+                # FF loss
+                if self.opt.training.sim_pred.beta < 1:
+                    ff_loss, ff_accuracy = self._calc_ff_loss(ff_z, posneg_labels)
+                else:
+                    ff_loss, ff_accuracy = self._calc_ff_loss(z, posneg_labels)  # for FF only
+                scalar_outputs[f"loss_layer_{block_idx}"] = ff_loss
+                scalar_outputs[f"ff_accuracy_layer_{block_idx}"] = ff_accuracy
+                scalar_outputs["Loss"] += self.opt.training.sim_pred.beta * ff_loss
 
             x = z.detach()
             x = self._layer_norm(x)
@@ -332,6 +357,7 @@ class FF_model(torch.nn.Module):
 
                 for layer_idx, layer in enumerate(block):
                     z = layer(z)
+                    z = self.bn[block_idx](z)
                     z = self.act_fn.apply(z)
                     z = self._layer_norm(z)
 

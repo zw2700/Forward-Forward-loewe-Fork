@@ -41,9 +41,9 @@ def train(opt, model, optimizer):
             # backward gradients for final layers in each block
             scalar_outputs["Loss"].backward()
 
-            for p in optimizer.param_groups[0]["params"]:
-                if p.grad is not None:
-                    print(p.grad.shape, torch.linalg.norm(p.grad))
+            # for p in optimizer.param_groups[0]["params"]:
+            #     if p.grad is not None:
+            #         print(p.grad.shape, torch.linalg.norm(p.grad))
 
 
             optimizer.step()
@@ -107,6 +107,8 @@ def my_main(opt: DictConfig) -> None:
 
     # if opt.training.final_test:
     #     validate_or_test(opt, model, "test")
+
+    torch.save(model.state_dict(), opt.path_to_model)  # save model
 
 
 if __name__ == "__main__":
