@@ -20,6 +20,8 @@ class FF_model(torch.nn.Module):
         self.opt = opt
         self.act_fn = ReLU_full_grad()
 
+        assert self.opt.model.num_blocks > 1, "model requires at least two blocks."
+
         if not self.opt.model.convolutional:
             self.num_channels = [getattr(self.opt.model.fully_connected, f"hidden_dim_{i+1}", 2000)
                                  for i in range(self.opt.model.num_blocks)]
@@ -103,9 +105,16 @@ class FF_model(torch.nn.Module):
             ]
 
         # Initialize downstream classification loss.
-        channels_for_classification_loss = sum(
-            self.num_channels[-i] for i in range(1, self.opt.model.num_blocks)
-        ) if self.opt.model.num_blocks > 1 else self.num_channels[0]
+        if opt.training.downstream_method == "2..n":
+            channels_for_classification_loss = sum(
+                self.num_channels[-i] for i in range(1, self.opt.model.num_blocks)
+            ) if self.opt.model.num_blocks > 1 else self.num_channels[0]
+        else:  # "n", only use last block for classification
+            if opt.model.convolutional and opt.model.num_blocks in opt.model.conv.pool: 
+                channels_for_classification_loss = self.num_channels[-1]//4
+            else:
+                channels_for_classification_loss = self.num_channels[-1]
+
         self.linear_classifier = nn.Sequential(
             nn.Linear(channels_for_classification_loss, opt.input.num_classes, bias=False)
         )
@@ -230,8 +239,6 @@ class FF_model(torch.nn.Module):
             # Comcatenate samples for FF and pred
             x = torch.cat([ff_x, pred_x], dim=0)
 
-        print(x.shape)
-
         xs,us,jvps = [],[],[]
 
         if not self.opt.model.convolutional:
@@ -285,6 +292,7 @@ class FF_model(torch.nn.Module):
                 scalar_outputs[f"loss_layer_{block_idx}"] = ff_loss
                 scalar_outputs[f"ff_accuracy_layer_{block_idx}"] = ff_accuracy
                 scalar_outputs["Loss"] += self.opt.training.sim_pred.beta * ff_loss
+                # print("ff loss:",ff_loss.item())
 
             x = z.detach()
             x = self._layer_norm(x)
@@ -361,13 +369,16 @@ class FF_model(torch.nn.Module):
                     z = self.act_fn.apply(z)
                     z = self._layer_norm(z)
 
-                if block_idx >= 1 or self.opt.model.num_blocks == 1:
+                if self.opt.training.downstream_method == "2..n" and block_idx >= 1:
                     input_classification_model.append(z.reshape(z.shape[0], -1))
 
                 if self.opt.model.convolutional and (block_idx+1) in self.opt.model.conv.pool:
                     z = F.max_pool2d(z, 2, 2)  # maxpool
 
-        input_classification_model = torch.concat(input_classification_model, dim=-1)
+        if self.opt.training.downstream_method == "2..n":
+            input_classification_model = torch.concat(input_classification_model, dim=-1)
+        else:
+            input_classification_model = z.reshape(z.shape[0], -1)
 
         output = self.linear_classifier(input_classification_model.detach())
         output = output - torch.max(output, dim=-1, keepdim=True)[0]
