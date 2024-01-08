@@ -110,18 +110,3 @@ class FF_CIFAR10(torch.utils.data.Dataset):
                                     for y in range(left,right+1) for x in range(top,bottom+1)])/ \
                                 sum([self.filter[x-i+radius][y-j+radius] for y in range(left,right+1) for x in range(top,bottom+1)])
         return new_img
-
-    def generate_negative_example(self):
-        # construct a negative example for unsupervised case (3.2 in paper)
-        mask = (torch.rand(28,28) > 0.5).long() # initiate as random bit image
-
-        for i in range(20): # repeat blurring 6 times
-            mask = self.blur(mask,filter)
-
-        mask = (mask > 0.5).long() # mask
-
-        index1,index2 = torch.randint(len(self.cifar10),(2,))
-        while self.cifar10[index1][1] == self.cifar10[index2][1]:
-            index1,index2 = torch.randint(len(self.cifar10),(2,))
-
-        return (mask * self.cifar10[index1][0] + (1-mask) * self.cifar10[index2][0])
