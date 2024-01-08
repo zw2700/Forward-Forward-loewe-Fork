@@ -82,14 +82,14 @@ def seed_worker(worker_id):
 
 
 def get_MNIST_partition(opt, partition):
-    if partition in ["train", "val", "train_val"]:
+    if partition == "train":
         mnist = torchvision.datasets.MNIST(
             os.path.join(get_original_cwd(), opt.input.path),
             train=True,
             download=True,
             transform=torchvision.transforms.ToTensor(),
         )
-    elif partition in ["test"]:
+    elif partition == "val":
         mnist = torchvision.datasets.MNIST(
             os.path.join(get_original_cwd(), opt.input.path),
             train=False,
@@ -97,19 +97,7 @@ def get_MNIST_partition(opt, partition):
             transform=torchvision.transforms.ToTensor(),
         )
     else:
-        raise NotImplementedError
-
-    if partition == "train":
-        mnist = torch.utils.data.Subset(mnist, range(50000))
-    elif partition == "val":
-        mnist = torchvision.datasets.MNIST(
-            os.path.join(get_original_cwd(), opt.input.path),
-            train=True,
-            download=True,
-            transform=torchvision.transforms.ToTensor(),
-        )
-        mnist = torch.utils.data.Subset(mnist, range(50000, 60000))
-
+        raise NotImplementedError    
     return mnist
 
 def get_CIFAR10_partition(opt, partition):
@@ -129,35 +117,26 @@ def get_CIFAR10_partition(opt, partition):
             transforms.Normalize((0.424, 0.415, 0.384), (0.283, 0.278, 0.284)),
         ])
     
-    if partition in ["train"]:
+    if partition == "train":
         cifar10 = torchvision.datasets.CIFAR10(
             os.path.join(get_original_cwd(), opt.input.path),
             train=True,
             download=True,
             transform=train_transform,
         )
-        return torch.utils.data.Subset(cifar10, range(40000))
     
     elif partition in ["val"]:
-        cifar10 = torchvision.datasets.CIFAR10(
-            os.path.join(get_original_cwd(), opt.input.path),
-            train=True,
-            download=True,
-            transform=test_transform,
-        )
-        return torch.utils.data.Subset(cifar10, range(40000, 50000))
-    
-    elif partition in ["test"]:
         cifar10 = torchvision.datasets.CIFAR10(
             os.path.join(get_original_cwd(), opt.input.path),
             train=False,
             download=True,
             transform=test_transform,
         )
-        return cifar10
     
     else:
         raise NotImplementedError
+    
+    return cifar10
 
 class Cutout(object):
     '''Randomly mask out one or more patches from an image.

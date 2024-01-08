@@ -201,7 +201,6 @@ training:
   downstream_method: "2..n"  # "n" for the final layer, "2..n" for all but first layers
 
   val_idx: 1  # -1: validate only once training has finished; n: validate every n epochs.
-  final_test: True  # Set to true to evaluate performance on test-set.
 
 
 hydra:

@@ -61,22 +61,22 @@ def train(opt, model, optimizer):
 
         # Validate.
         if epoch % opt.training.val_idx == 0 and opt.training.val_idx != -1:
-            validate_or_test(opt, model, "val", epoch=epoch)
+            validate(opt, model, epoch=epoch)
         
         # return model
 
     return model
 
 
-def validate_or_test(opt, model, partition, epoch=None):
+def validate(opt, model, epoch=None):
     test_time = time.time()
     test_results = defaultdict(float)
 
-    data_loader = utils.get_data(opt, partition)
+    data_loader = utils.get_data(opt, "val")
     num_steps_per_epoch = len(data_loader)
 
     model.eval()
-    print(partition)
+    print("val")
     with torch.no_grad():
         for inputs, labels in data_loader:
             inputs, labels = utils.preprocess_inputs(opt, inputs, labels)
@@ -89,9 +89,9 @@ def validate_or_test(opt, model, partition, epoch=None):
                 test_results, scalar_outputs, num_steps_per_epoch
             )
 
-    utils.print_results(partition, time.time() - test_time, test_results, epoch=epoch)
-    if partition == "val" and epoch is not None and opt.wandb.activate:
-        wandb.log({partition: test_results}, step=epoch)
+    utils.print_results("val", time.time() - test_time, test_results, epoch=epoch)
+    if epoch is not None and opt.wandb.activate:
+        wandb.log({"val": test_results}, step=epoch)
     model.train()
 
 
@@ -104,12 +104,9 @@ def my_main(opt: DictConfig) -> None:
     print(OmegaConf.to_yaml(opt))
     model, optimizer = utils.get_model_and_optimizer(opt)
     model = train(opt, model, optimizer)
-    # validate_or_test(opt, model, "val")
+    validate(opt, model)
 
-    # if opt.training.final_test:
-    #     validate_or_test(opt, model, "test")
-
-    torch.save(model.state_dict(), opt.path_to_model)  # save model
+    # torch.save(model.state_dict(), opt.path_to_model)  # save model
 
 
 if __name__ == "__main__":
