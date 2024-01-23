@@ -52,7 +52,6 @@ def train(opt, model, optimizer):
                 train_results, scalar_outputs, num_steps_per_epoch
             )
             return model
-            # break
 
         utils.print_results("train", time.time() - start_time, train_results, epoch)
         if opt.wandb.activate:
@@ -104,7 +103,7 @@ def my_main(opt: DictConfig) -> None:
     print(OmegaConf.to_yaml(opt))
     model, optimizer = utils.get_model_and_optimizer(opt)
     model = train(opt, model, optimizer)
-    validate(opt, model)
+    # validate(opt, model)
 
     # torch.save(model.state_dict(), opt.path_to_model)  # save model
 

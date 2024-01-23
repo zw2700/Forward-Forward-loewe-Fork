@@ -17,7 +17,7 @@ class FF_CIFAR10(torch.utils.data.Dataset):
         self.filter = torch.tensor([[0.0625,0.125,0.0625],[0.125,0.25,0.125],[0.0625,0.125,0.0625]])
 
     def __getitem__(self, index):
-        pos_sample, neg_sample, neutral_sample, prediction_sample, class_label = self._generate_sample(
+        pos_sample, neg_sample, neutral_sample, original_sample, class_label = self._generate_sample(
             index
         )
 
@@ -25,7 +25,7 @@ class FF_CIFAR10(torch.utils.data.Dataset):
             "pos_images": pos_sample,
             "neg_images": neg_sample,
             "neutral_sample": neutral_sample,
-            "prediction_sample": prediction_sample,
+            "original_sample": original_sample,
         }
         labels = {"class_labels": class_label}
         return inputs, labels
@@ -82,7 +82,7 @@ class FF_CIFAR10(torch.utils.data.Dataset):
             neutral_sample = sample.clone()
         return neutral_sample
     
-    def _get_prediction_sample(self, sample):
+    def _get_original_sample(self, sample):
         return sample.clone()
 
     def _generate_sample(self, index):
@@ -91,8 +91,8 @@ class FF_CIFAR10(torch.utils.data.Dataset):
         pos_sample = self._get_pos_sample(sample, class_label)
         neg_sample = self._get_neg_sample(sample, class_label)
         neutral_sample = self._get_neutral_sample(sample)
-        prediction_sample = self._get_prediction_sample(sample)
-        return pos_sample, neg_sample, neutral_sample, prediction_sample, class_label
+        original_sample = self._get_original_sample(sample)
+        return pos_sample, neg_sample, neutral_sample, original_sample, class_label
     
 
     
