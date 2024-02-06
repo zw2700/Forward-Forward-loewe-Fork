@@ -19,6 +19,17 @@ model:
   convolutional: True
   num_blocks: 10
   predictor_size: 8192
+  reconstruction_objectives:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
 
   fully_connected:  
     num_layers_per_block: 1
@@ -186,7 +197,7 @@ model:
     channels_10: 512
 
 training:
-  epochs: 100
+  epochs: 200
 
   learning_rate: 1e-3
   weight_decay: 3e-4
@@ -194,7 +205,7 @@ training:
   dropout: 0.2
   init: He
   sim_pred:
-    beta: 1  # 1 means only unsupervised loss, 0 means only prediction loss. Should be between 0 and 1 inclusively.
+    beta: 0  # 1 means only unsupervised loss, 0 means only prediction loss. Should be between 0 and 1 inclusively.
 
   downstream_learning_rate: 1e-2
   downstream_weight_decay: 3e-3

@@ -10,6 +10,8 @@ from torch.nn.modules.utils import _pair
 
 from src import utils
 
+from pytorch_msssim import SSIM
+
 
 class FF_model(torch.nn.Module):
     """The model trained with Forward-Forward (FF)."""
@@ -43,6 +45,7 @@ class FF_model(torch.nn.Module):
                                  for i in range(self.opt.model.num_blocks)]
 
             prev_dimension = self.opt.input.input_channels
+            self.ae_criterion = []
             for i in range(self.opt.model.num_blocks):
                 # self.model.append(nn.ModuleList([LocallyConnected2d(prev_dimension,  # in_channels
                 #                                                     getattr(self.opt.model.conv, f"channels_{i+1}", 1),     # out_channels
@@ -79,6 +82,7 @@ class FF_model(torch.nn.Module):
                                                             stride=getattr(self.opt.model.conv, f"stride_{i+1}", 1) + 1,       # stride
                                                             padding=getattr(self.opt.model.conv, f"padding_{i+1}", 1)       # padding
                                                             ))
+                self.ae_criterion.append(SSIM(data_range=1.0, size_average=True, channel=prev_dimension))
                 prev_dimension = getattr(self.opt.model.conv, f"channels_{i+1}", 1)
 
         # Initialize layer-wise predictor and avg-pooling layers for prediction loss.
@@ -193,11 +197,20 @@ class FF_model(torch.nn.Module):
     def _layer_norm(self, z, eps=1e-8):
         return z / (torch.sqrt(torch.mean(z ** 2, dim=list(range(1,len(z.shape))), keepdim=True)) + eps)
     
-    def _calc_ae_loss(self, x, z, layer_idx):
-        reconstruct_x = self.decoders[layer_idx](z)
-        if layer_idx == 0:
-            reconstruct_x = torch.sigmoid(reconstruct_x)
-        ae_loss = self.ae_loss(reconstruct_x, x)
+    def _calc_ae_loss(self, x, z, start_layer_idx, end_layer_idx):
+        reconstruct_x = z.clone()
+        for layer_idx in range(end_layer_idx, start_layer_idx-1, -1):
+            reconstruct_x = self.decoders[layer_idx](reconstruct_x)
+
+            if layer_idx > start_layer_idx:
+                reconstruct_x = self.act_fn.apply(reconstruct_x)
+                reconstruct_x = self._layer_norm(reconstruct_x)
+            # elif layer_idx == start_layer_idx == 0:
+            else:
+                reconstruct_x = torch.sigmoid(reconstruct_x)
+                return 1 - self.ae_criterion[start_layer_idx](reconstruct_x, torch.sigmoid(x))
+                
+        ae_loss = 1 - self.ae_criterion[start_layer_idx](reconstruct_x, x)
         return ae_loss
 
     def _calc_peer_normalization_loss(self, idx, z):
@@ -247,13 +260,19 @@ class FF_model(torch.nn.Module):
     def _construct_neg_sample(self, sample):
         # use Autoencoder to construct negative sample
         # with torch.no_grad():
+        reencode, redecode, encodetype, decodetype = [], [], [], []
+
         # encoder
         z = sample.clone()
+        reencode.append(z.clone())
+        encodetype.append("input")
         for block_idx, block in enumerate(self.model):
             z = block[0](z)
             # z = self.bn[block_idx](z)
             z = self.act_fn.apply(z)
             z = self._layer_norm(z)
+            reencode.append(z.clone())
+            encodetype.append("layer")
 
             if (block_idx+1) < self.opt.model.num_blocks:
                 # z = self._layer_norm(z)
@@ -264,6 +283,8 @@ class FF_model(torch.nn.Module):
         # z = z + torch.randn_like(z) * 0.01
 
         # decoder
+        redecode.insert(0, z.clone())
+        decodetype.insert(0, "output")
         for layer_idx in range(self.opt.model.num_blocks-1, -1, -1):
             z = self.decoders[layer_idx](z)
 
@@ -271,13 +292,27 @@ class FF_model(torch.nn.Module):
                 # z = self.bn[layer_idx-1](z)
                 z = self.act_fn.apply(z)
                 z = self._layer_norm(z)
-
-                # if self.opt.model.convolutional and layer_idx in self.opt.model.conv.pool and layer_idx < self.opt.model.num_blocks:
-                #     z = F.interpolate(z, scale_factor=2, mode='bilinear')
-                #     redecode.insert(0, z.clone())
-                #     decodetype.insert(0, "upsample")
+                redecode.insert(0, z.clone())
+                decodetype.insert(0, "layer")
             else:
                 z = torch.sigmoid(z)
+                redecode.insert(0, z.clone())
+                decodetype.insert(0, "sigmoid")
+        print(len(reencode), len(redecode))
+        print(F.mse_loss(reencode[0], redecode[0]), encodetype[0], decodetype[0])
+        print(F.mse_loss(reencode[1], redecode[1]), encodetype[1], decodetype[1])
+        print(F.mse_loss(reencode[2], redecode[2]), encodetype[2], decodetype[2])
+        print(F.mse_loss(reencode[3], redecode[3]), encodetype[3], decodetype[3])
+        print(F.mse_loss(reencode[4], redecode[4]), encodetype[4], decodetype[4])
+        print(F.mse_loss(reencode[5], redecode[5]), encodetype[5], decodetype[5])
+        print(F.mse_loss(reencode[6], redecode[6]), encodetype[6], decodetype[6])
+        print(F.mse_loss(reencode[7], redecode[7]), encodetype[7], decodetype[7])
+        print(F.mse_loss(reencode[8], redecode[8]), encodetype[8], decodetype[8])
+        print(F.mse_loss(reencode[9], redecode[9]), encodetype[9], decodetype[9])
+        print(F.mse_loss(reencode[10], redecode[10]), encodetype[10], decodetype[10])
+        # print(F.mse_loss(reencode[11], redecode[11]), encodetype[11], decodetype[11])
+        # print(F.mse_loss(reencode[12], redecode[12]), encodetype[12], decodetype[12])
+        # print(F.mse_loss(reencode[13], redecode[13]), encodetype[13], decodetype[13])
         return z
 
     def forward(self, inputs, labels):
@@ -320,6 +355,9 @@ class FF_model(torch.nn.Module):
         if not self.opt.model.convolutional:
             x = x.reshape(x.shape[0], -1)
         # x = self._layer_norm(x)
+            
+        reconstruction_prev_layer_num = 0
+        reconstruction_targets = x.clone()
 
         for block_idx, block in enumerate(self.model):
 
@@ -329,58 +367,67 @@ class FF_model(torch.nn.Module):
 
             # backward for two layers
 
-            z = block[0](x)
+            if block_idx == 0 or block_idx in self.opt.model.reconstruction_objectives:
+                reconstruction_targets = x.detach().clone()
+                reconstruction_prev_layer_num = block_idx
+
+            z = x.clone()
+            if self.opt.model.convolutional and block_idx in self.opt.model.conv.pool:
+                z = F.max_pool2d(z, 2, 2)  # maxpool
+            z = block[0](z)
             z = self.bn[block_idx](z)
             z = self.act_fn.apply(z)
             if self.opt.training.dropout > 0:
                 z = F.dropout(z, p=self.opt.training.dropout, training=True)
-            # z = self._layer_norm(z)
+            z = self._layer_norm(z)
             # z = block[1](z)
             # z = self.act_fn.apply(z)
                 
-            if 0 < self.opt.training.sim_pred.beta < 1:  # simpred, separate FF and pred inputs
-                ff_z, pred_z = z[:-self.opt.input.batch_size], z[-self.opt.input.batch_size:]
-                
-            if self.opt.training.sim_pred.beta < 1:  # prediction loss, pred or simpred
-                if self.opt.training.sim_pred.beta > 0:
-                    pred_loss, pred_accuracy = self._calc_pred_loss(pred_z, labels["class_labels"], block_idx)
-                else:
-                    pred_loss, pred_accuracy = self._calc_pred_loss(z, labels["class_labels"], block_idx)  # for prediction only
+            if block_idx + 1 in self.opt.model.reconstruction_objectives:
 
-                scalar_outputs[f"pred_loss_layer_{block_idx}"] = pred_loss
-                scalar_outputs[f"pred_accuracy_layer_{block_idx}"] = pred_accuracy
-                scalar_outputs["Loss"] += (1-self.opt.training.sim_pred.beta) * pred_loss
-
-            if self.opt.training.sim_pred.beta > 0:  # peer normalization & FF loss, ff or simpred
-                # peer normalization loss
-                if self.opt.model.peer_normalization > 0:
-                    if self.opt.training.sim_pred.beta < 1:
-                        peer_loss = self._calc_peer_normalization_loss(block_idx, ff_z)
+                if 0 < self.opt.training.sim_pred.beta < 1:  # simpred, separate FF and pred inputs
+                    ff_z, pred_z = z[:-self.opt.input.batch_size], z[-self.opt.input.batch_size:]
+                    
+                if self.opt.training.sim_pred.beta < 1:  # prediction loss, pred or simpred
+                    if self.opt.training.sim_pred.beta > 0:
+                        pred_loss, pred_accuracy = self._calc_pred_loss(pred_z, labels["class_labels"], block_idx)
                     else:
-                        peer_loss = self._calc_peer_normalization_loss(block_idx, z)  # for FF only
-                    scalar_outputs["Peer Normalization"] += peer_loss
-                    scalar_outputs["Loss"] += self.opt.model.peer_normalization * peer_loss
+                        # pred_loss, pred_accuracy = self._calc_pred_loss(z, labels["class_labels"], block_idx)  # for prediction only
+                        ae_loss = self._calc_ae_loss(reconstruction_targets, z, reconstruction_prev_layer_num, block_idx)
 
-                # FF loss
-                if self.opt.training.sim_pred.beta < 1:
-                    ff_loss, ff_accuracy = self._calc_ff_loss(ff_z, posneg_labels)
-                    ae_loss = self._calc_ae_loss(x[:self.opt.input.batch_size], ff_z[:self.opt.input.batch_size], block_idx)
-                else:
-                    ff_loss, ff_accuracy = self._calc_ff_loss(z, posneg_labels)  # for FF only
-                    ae_loss = self._calc_ae_loss(x[:self.opt.input.batch_size], z[:self.opt.input.batch_size], block_idx)
-                scalar_outputs[f"loss_layer_{block_idx}"] = ff_loss
-                scalar_outputs[f"ff_accuracy_layer_{block_idx}"] = ff_accuracy
-                scalar_outputs["Loss"] += self.opt.training.sim_pred.beta * ff_loss
+                    # scalar_outputs[f"pred_loss_layer_{block_idx}"] = pred_loss
+                    # scalar_outputs[f"pred_accuracy_layer_{block_idx}"] = pred_accuracy
+                    # scalar_outputs["Loss"] += (1-self.opt.training.sim_pred.beta) * pred_loss
+                        
+                    scalar_outputs["Loss"] += ae_loss
 
-                scalar_outputs[f"ae_loss_layer_{block_idx}"] = ae_loss
-                scalar_outputs["Loss"] += ae_loss
-                # print("ff loss:",ff_loss.item())
+                if self.opt.training.sim_pred.beta > 0:  # peer normalization & FF loss, ff or simpred
+                    # peer normalization loss
+                    if self.opt.model.peer_normalization > 0:
+                        if self.opt.training.sim_pred.beta < 1:
+                            peer_loss = self._calc_peer_normalization_loss(block_idx, ff_z)
+                        else:
+                            peer_loss = self._calc_peer_normalization_loss(block_idx, z)  # for FF only
+                        scalar_outputs["Peer Normalization"] += peer_loss
+                        scalar_outputs["Loss"] += self.opt.model.peer_normalization * peer_loss
 
-            x = z.detach()
-            x = self._layer_norm(x)
+                    # FF loss
+                    if self.opt.training.sim_pred.beta < 1:
+                        ff_loss, ff_accuracy = self._calc_ff_loss(ff_z, posneg_labels)
+                        ae_loss = self._calc_ae_loss(reconstruction_targets[:self.opt.input.batch_size], ff_z[:self.opt.input.batch_size], reconstruction_prev_layer_num, block_idx)
+                    else:
+                        ff_loss, ff_accuracy = self._calc_ff_loss(z, posneg_labels)  # for FF only
+                        ae_loss = self._calc_ae_loss(reconstruction_targets[:self.opt.input.batch_size], z[:self.opt.input.batch_size], reconstruction_prev_layer_num, block_idx)
+                    scalar_outputs[f"loss_layer_{block_idx}"] = ff_loss
+                    scalar_outputs[f"ff_accuracy_layer_{block_idx}"] = ff_accuracy
+                    scalar_outputs["Loss"] += self.opt.training.sim_pred.beta * ff_loss
 
-            if self.opt.model.convolutional and (block_idx+1) in self.opt.model.conv.pool:
-                x = F.max_pool2d(x, 2, 2)  # maxpool
+                    scalar_outputs[f"ae_loss_layer_{block_idx}"] = ae_loss
+                    scalar_outputs["Loss"] += ae_loss
+
+                x = z.detach()
+            else:
+                x = z.clone()
 
             # forward for one layer, backward for one layer, implement later
             # block_xs.append(x)

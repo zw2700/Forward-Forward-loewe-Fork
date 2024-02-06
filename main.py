@@ -14,7 +14,6 @@ def train(opt, model, optimizer):
     start_time = time.time()
     train_loader = utils.get_data(opt, "train")
     num_steps_per_epoch = len(train_loader)
-    # return model
 
     for epoch in range(opt.training.epochs):
         train_results = defaultdict(float)
@@ -41,9 +40,9 @@ def train(opt, model, optimizer):
             # backward gradients for final layers in each block
             scalar_outputs["Loss"].backward()
 
-            # for p in optimizer.param_groups[0]["params"]:
-            #     if p.grad is not None:
-            #         print(p.grad.shape, torch.linalg.norm(p.grad))
+            for i, p in enumerate(optimizer.param_groups[0]["params"]):
+                if p.grad is not None:
+                    print(i, p.grad.shape, torch.linalg.norm(p.grad))
 
 
             optimizer.step()
@@ -61,8 +60,6 @@ def train(opt, model, optimizer):
         # Validate.
         if epoch % opt.training.val_idx == 0 and opt.training.val_idx != -1:
             validate(opt, model, epoch=epoch)
-        
-        # return model
 
     return model
 
