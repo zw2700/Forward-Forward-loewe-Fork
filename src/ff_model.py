@@ -205,7 +205,6 @@ class FF_model(torch.nn.Module):
             if layer_idx > start_layer_idx:
                 reconstruct_x = self.act_fn.apply(reconstruct_x)
                 reconstruct_x = self._layer_norm(reconstruct_x)
-            # elif layer_idx == start_layer_idx == 0:
             else:
                 reconstruct_x = torch.sigmoid(reconstruct_x)
                 return 1 - self.ae_criterion[start_layer_idx](reconstruct_x, torch.sigmoid(x))
@@ -259,61 +258,58 @@ class FF_model(torch.nn.Module):
     
     def _construct_neg_sample(self, sample):
         # use Autoencoder to construct negative sample
-        # with torch.no_grad():
-        reencode, redecode, encodetype, decodetype = [], [], [], []
+        with torch.no_grad():
+            reencode, redecode, encodetype, decodetype = [], [], [], []
 
-        # encoder
-        z = sample.clone()
-        reencode.append(z.clone())
-        encodetype.append("input")
-        for block_idx, block in enumerate(self.model):
-            z = block[0](z)
-            # z = self.bn[block_idx](z)
-            z = self.act_fn.apply(z)
-            z = self._layer_norm(z)
+            # encoder
+            z = sample.clone()
             reencode.append(z.clone())
-            encodetype.append("layer")
-
-            if (block_idx+1) < self.opt.model.num_blocks:
-                # z = self._layer_norm(z)
-                if self.opt.model.convolutional and (block_idx+1) in self.opt.model.conv.pool:
-                    z = F.max_pool2d(z, 2, 2)  # maxpool
-
-        # add noise
-        # z = z + torch.randn_like(z) * 0.01
-
-        # decoder
-        redecode.insert(0, z.clone())
-        decodetype.insert(0, "output")
-        for layer_idx in range(self.opt.model.num_blocks-1, -1, -1):
-            z = self.decoders[layer_idx](z)
-
-            if layer_idx > 0:
-                # z = self.bn[layer_idx-1](z)
+            encodetype.append("input")
+            for block_idx, block in enumerate(self.model):
+                z = block[0](z)
+                # z = self.bn[block_idx](z)
                 z = self.act_fn.apply(z)
                 z = self._layer_norm(z)
-                redecode.insert(0, z.clone())
-                decodetype.insert(0, "layer")
-            else:
-                z = torch.sigmoid(z)
-                redecode.insert(0, z.clone())
-                decodetype.insert(0, "sigmoid")
-        print(len(reencode), len(redecode))
-        print(F.mse_loss(reencode[0], redecode[0]), encodetype[0], decodetype[0])
-        print(F.mse_loss(reencode[1], redecode[1]), encodetype[1], decodetype[1])
-        print(F.mse_loss(reencode[2], redecode[2]), encodetype[2], decodetype[2])
-        print(F.mse_loss(reencode[3], redecode[3]), encodetype[3], decodetype[3])
-        print(F.mse_loss(reencode[4], redecode[4]), encodetype[4], decodetype[4])
-        print(F.mse_loss(reencode[5], redecode[5]), encodetype[5], decodetype[5])
-        print(F.mse_loss(reencode[6], redecode[6]), encodetype[6], decodetype[6])
-        print(F.mse_loss(reencode[7], redecode[7]), encodetype[7], decodetype[7])
-        print(F.mse_loss(reencode[8], redecode[8]), encodetype[8], decodetype[8])
-        print(F.mse_loss(reencode[9], redecode[9]), encodetype[9], decodetype[9])
-        print(F.mse_loss(reencode[10], redecode[10]), encodetype[10], decodetype[10])
-        # print(F.mse_loss(reencode[11], redecode[11]), encodetype[11], decodetype[11])
-        # print(F.mse_loss(reencode[12], redecode[12]), encodetype[12], decodetype[12])
-        # print(F.mse_loss(reencode[13], redecode[13]), encodetype[13], decodetype[13])
-        return z
+                reencode.append(z.clone())
+                encodetype.append("layer")
+
+                if (block_idx+1) < self.opt.model.num_blocks:
+                    # z = self._layer_norm(z)
+                    if self.opt.model.convolutional and (block_idx+1) in self.opt.model.conv.pool:
+                        z = F.max_pool2d(z, 2, 2)  # maxpool
+
+            # decoder
+            redecode.insert(0, z.clone())
+            decodetype.insert(0, "output")
+            for layer_idx in range(self.opt.model.num_blocks-1, -1, -1):
+                z = self.decoders[layer_idx](z)
+
+                if layer_idx > 0:
+                    # z = self.bn[layer_idx-1](z)
+                    z = self.act_fn.apply(z)
+                    z = self._layer_norm(z)
+                    redecode.insert(0, z.clone())
+                    decodetype.insert(0, "layer")
+                else:
+                    z = torch.sigmoid(z)
+                    redecode.insert(0, z.clone())
+                    decodetype.insert(0, "sigmoid")
+            print(len(reencode), len(redecode))
+            print(F.mse_loss(reencode[0], redecode[0]), encodetype[0], decodetype[0])
+            print(F.mse_loss(reencode[1], redecode[1]), encodetype[1], decodetype[1])
+            print(F.mse_loss(reencode[2], redecode[2]), encodetype[2], decodetype[2])
+            print(F.mse_loss(reencode[3], redecode[3]), encodetype[3], decodetype[3])
+            print(F.mse_loss(reencode[4], redecode[4]), encodetype[4], decodetype[4])
+            print(F.mse_loss(reencode[5], redecode[5]), encodetype[5], decodetype[5])
+            print(F.mse_loss(reencode[6], redecode[6]), encodetype[6], decodetype[6])
+            print(F.mse_loss(reencode[7], redecode[7]), encodetype[7], decodetype[7])
+            print(F.mse_loss(reencode[8], redecode[8]), encodetype[8], decodetype[8])
+            print(F.mse_loss(reencode[9], redecode[9]), encodetype[9], decodetype[9])
+            print(F.mse_loss(reencode[10], redecode[10]), encodetype[10], decodetype[10])
+            # print(F.mse_loss(reencode[11], redecode[11]), encodetype[11], decodetype[11])
+            # print(F.mse_loss(reencode[12], redecode[12]), encodetype[12], decodetype[12])
+            # print(F.mse_loss(reencode[13], redecode[13]), encodetype[13], decodetype[13])
+            return z
 
     def forward(self, inputs, labels):
         scalar_outputs = {
@@ -321,19 +317,10 @@ class FF_model(torch.nn.Module):
             "Peer Normalization": torch.zeros(1, device=self.opt.device),
         }
 
-        ## for training end-to-end autoencoder
-        # x = inputs["original_sample"]
-        # reconstruct_x = self._construct_neg_sample(x)
-        # ae_loss = self.ae_loss(reconstruct_x, x)
-        # scalar_outputs["ae_loss"] = ae_loss
-        # scalar_outputs["Loss"] += ae_loss
-        # return scalar_outputs, None, None, None
-
         if self.opt.training.sim_pred.beta == 1:  # FF only
             # x = torch.cat([inputs["pos_images"], inputs["neg_images"]], dim=0)  # original FF
             x = torch.cat([inputs["original_sample"], self._construct_neg_sample(inputs["original_sample"])], dim=0)  # negative sample from AE
             posneg_labels = torch.zeros(x.shape[0], device=self.opt.device)  
-            # posneg_labels[: self.opt.input.batch_size] = 1  # for maximizing goodness for positive samples
             posneg_labels[self.opt.input.batch_size:] = 1  # for minimizing goodness for positive samples
         elif self.opt.training.sim_pred.beta == 0:  # prediction only
             x = inputs["original_sample"]
@@ -341,7 +328,6 @@ class FF_model(torch.nn.Module):
             # Concatenate positive and negative samples and create corresponding labels.
             ff_x = torch.cat([inputs["pos_images"], inputs["neg_images"]], dim=0)
             posneg_labels = torch.zeros(ff_x.shape[0], device=self.opt.device)
-            # posneg_labels[: self.opt.input.batch_size] = 1  # for maximizing goodness for positive samples
             posneg_labels[self.opt.input.batch_size:] = 1  # for minimizing goodness for positive samples
 
             # Prediction sample
