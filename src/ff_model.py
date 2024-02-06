@@ -205,12 +205,12 @@ class FF_model(torch.nn.Module):
             if layer_idx > start_layer_idx:
                 reconstruct_x = self.act_fn.apply(reconstruct_x)
                 reconstruct_x = self._layer_norm(reconstruct_x)
+            
             else:
                 reconstruct_x = torch.sigmoid(reconstruct_x)
-                return 1 - self.ae_criterion[start_layer_idx](reconstruct_x, torch.sigmoid(x))
-                
-        ae_loss = 1 - self.ae_criterion[start_layer_idx](reconstruct_x, x)
-        return ae_loss
+                ae_loss = 1 - self.ae_criterion[start_layer_idx](reconstruct_x, x)
+                mse_loss = self.ae_loss(reconstruct_x, x)
+                return ae_loss + mse_loss
 
     def _calc_peer_normalization_loss(self, idx, z):
         # Only calculate mean activity over positive samples.
@@ -366,8 +366,6 @@ class FF_model(torch.nn.Module):
             if self.opt.training.dropout > 0:
                 z = F.dropout(z, p=self.opt.training.dropout, training=True)
             z = self._layer_norm(z)
-            # z = block[1](z)
-            # z = self.act_fn.apply(z)
                 
             if block_idx + 1 in self.opt.model.reconstruction_objectives:
 
