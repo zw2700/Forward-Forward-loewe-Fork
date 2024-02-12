@@ -38,11 +38,12 @@ def train(opt, model, optimizer):
             # print(optimizer.param_groups[0]["params"][1].grad, optimizer.param_groups[0]["params"][3].grad)
 
             # backward gradients for final layers in each block
+            print(scalar_outputs)
             scalar_outputs["Loss"].backward()
 
-            for i, p in enumerate(optimizer.param_groups[0]["params"]):
-                if p.grad is not None:
-                    print(i, p.grad.shape, torch.linalg.norm(p.grad))
+            # for i, p in enumerate(optimizer.param_groups[0]["params"]):
+            #     if p.grad is not None:
+            #         print(i, p.grad.shape, torch.linalg.norm(p.grad))
 
 
             optimizer.step()
@@ -100,9 +101,10 @@ def my_main(opt: DictConfig) -> None:
     print(OmegaConf.to_yaml(opt))
     model, optimizer = utils.get_model_and_optimizer(opt)
     model = train(opt, model, optimizer)
-    # validate(opt, model)
+    validate(opt, model)
 
-    # torch.save(model.state_dict(), opt.path_to_model)  # save model
+    if opt.save:
+        torch.save(model.state_dict(), opt.path_to_model)
 
 
 if __name__ == "__main__":

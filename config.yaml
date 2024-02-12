@@ -1,5 +1,6 @@
 seed: 42
 device: "cpu"  # cpu or cuda
+save: False
 path_to_model: "models/test.pt"
 
 input:
@@ -205,7 +206,7 @@ training:
   dropout: 0.2
   init: He
   sim_pred:
-    beta: 0  # 1 means only unsupervised loss, 0 means only prediction loss. Should be between 0 and 1 inclusively.
+    beta: 1  # 1 means only unsupervised loss, 0 means only prediction loss. Should be between 0 and 1 inclusively.
 
   downstream_learning_rate: 1e-2
   downstream_weight_decay: 3e-3
