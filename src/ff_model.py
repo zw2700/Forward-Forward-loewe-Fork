@@ -334,7 +334,7 @@ class FF_model(torch.nn.Module):
 
         if not self.opt.model.convolutional:
             x = x.reshape(x.shape[0], -1)
-        # x = self._layer_norm(x)
+        x = self._layer_norm(x)
             
         reconstruction_prev_layer_num = 0
         reconstruction_targets = x.clone()
@@ -474,10 +474,11 @@ class FF_model(torch.nn.Module):
                     z = layer(z)
                     # z = self.bn[block_idx](z)
                     z = self.act_fn.apply(z)
-                    z = self._layer_norm(z)
 
                 if self.opt.training.downstream_method == "2..n" and block_idx >= 1:
                     input_classification_model.append(z.reshape(z.shape[0], -1))
+
+                z = self._layer_norm(z)
 
                 if self.opt.model.convolutional and (block_idx+1) in self.opt.model.conv.pool:
                     z = F.max_pool2d(z, 2, 2)  # maxpool
