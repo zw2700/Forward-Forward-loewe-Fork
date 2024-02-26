@@ -241,12 +241,12 @@ class FF_model(torch.nn.Module):
 
     def _calc_ff_loss(self, z, labels, layer_index):
         if self.opt.model.goodness_type == "spatial":
-            sum_of_squares = self.convs[layer_index](z ** 2)
-            logits = torch.mean(sum_of_squares, dim=list(range(1,len(sum_of_squares.shape))))
+            # sum_of_squares = self.convs[layer_index](z ** 2)
+            # logits = torch.mean(sum_of_squares, dim=list(range(1,len(sum_of_squares.shape))))
 
-            # z = self.convs[layer_index](z)
-            # sum_of_squares = torch.sum(z ** 2, dim=list(range(1,len(z.shape))))
-            # logits = sum_of_squares - (z.reshape(len(z),-1).shape[1] * 0.625)
+            z = self.convs[layer_index](z)
+            sum_of_squares = torch.sum(z ** 2, dim=list(range(1,len(z.shape))))
+            logits = sum_of_squares - (z.reshape(len(z),-1).shape[1] * 0.625)
             
         else:
             if self.opt.model.goodness_type == "avgpool":
