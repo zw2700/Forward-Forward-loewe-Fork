@@ -46,6 +46,7 @@ class FF_model(torch.nn.Module):
 
             prev_dimension = self.opt.input.input_channels
             self.ae_criterion = []
+            self.convs = nn.ModuleList()
             for i in range(self.opt.model.num_blocks):
                 # self.model.append(nn.ModuleList([LocallyConnected2d(prev_dimension,  # in_channels
                 #                                                     getattr(self.opt.model.conv, f"channels_{i+1}", 1),     # out_channels
@@ -75,7 +76,7 @@ class FF_model(torch.nn.Module):
                                                         stride=getattr(self.opt.model.conv, f"stride_{i+1}", 1),       # stride
                                                         padding=getattr(self.opt.model.conv, f"padding_{i+1}", 1)       # padding
                                                         ))
-                else:
+                else:  # transpose convolution to upsample by scale of 2
                     self.decoders.append(nn.ConvTranspose2d(getattr(self.opt.model.conv, f"channels_{i+1}", 1),      # in_channels                                 # in_channels
                                                             prev_dimension,                                         # out_channels
                                                             getattr(self.opt.model.conv, f"kernel_size_{i+1}", 1) + 1,  # kernel_size
@@ -83,8 +84,23 @@ class FF_model(torch.nn.Module):
                                                             padding=getattr(self.opt.model.conv, f"padding_{i+1}", 1)       # padding
                                                             ))
                 self.ae_criterion.append(SSIM(data_range=1.0, size_average=True, channel=prev_dimension))
-                prev_dimension = getattr(self.opt.model.conv, f"channels_{i+1}", 1)
+                
+                conv = nn.Conv2d(getattr(self.opt.model.conv, f"channels_{i+1}", 1), 1, 3, 1, 1)
+                conv.weight = nn.parameter.Parameter(torch.ones_like(conv.weight) / 9)
+                conv.weight.requires_grad = False
+                conv.bias = nn.parameter.Parameter(torch.zeros_like(conv.bias))
+                conv.bias.requires_grad = False
+                self.convs.append(conv)
 
+                prev_dimension = getattr(self.opt.model.conv, f"channels_{i+1}", 1)
+        
+        conv = nn.Conv2d(3, 1, 3, 1, 1)
+        conv.weight = nn.parameter.Parameter(torch.ones_like(conv.weight) / 9)
+        conv.weight.requires_grad = False
+        conv.bias = nn.parameter.Parameter(torch.zeros_like(conv.bias))
+        conv.bias.requires_grad = False
+        self.convs.append(conv)
+        
         # Initialize layer-wise predictor and avg-pooling layers for prediction loss.
         self.pred_loss = nn.CrossEntropyLoss()
         self.layer_predictor = nn.Linear(opt.model.predictor_size, opt.input.num_classes)
@@ -186,8 +202,14 @@ class FF_model(torch.nn.Module):
             if isinstance(m, nn.Linear):
                 nn.init.zeros_(m.weight)
 
-    def _layer_norm(self, z, eps=1e-8):
-        return z / (torch.sqrt(torch.mean(z ** 2, dim=list(range(1,len(z.shape))), keepdim=True)) + eps)
+    def _layer_norm(self, z, layer_idx, eps=1e-8):
+        if self.opt.model.norm_type == "layer":  # layer normalization
+            scale = (torch.sqrt(torch.mean(z ** 2, dim=list(range(1,len(z.shape))), keepdim=True)) + eps) 
+        elif self.opt.model.norm_type == "channel":  # channel normalization
+            scale = (torch.sqrt(torch.mean(z ** 2, dim=list(range(2,len(z.shape))), keepdim=True)) + eps) 
+        elif self.opt.model.norm_type == "divisive":  # divisive normalization
+            scale = (torch.sqrt(self.convs[layer_idx](z ** 2)) + eps) 
+        return z / scale
     
     def _calc_ae_loss(self, x, z, start_layer_idx, end_layer_idx):
         reconstruct_x = z.clone()
@@ -196,7 +218,7 @@ class FF_model(torch.nn.Module):
 
             if layer_idx > start_layer_idx:
                 reconstruct_x = self.act_fn.apply(reconstruct_x)
-                reconstruct_x = self._layer_norm(reconstruct_x)
+                reconstruct_x = self._layer_norm(reconstruct_x, layer_idx-1)
             
             else:
                 reconstruct_x = torch.sigmoid(reconstruct_x)
@@ -218,14 +240,23 @@ class FF_model(torch.nn.Module):
         return torch.mean(peer_loss)
 
     def _calc_ff_loss(self, z, labels, layer_index):
-        if self.opt.model.convolutional:
-            z = self.avgpools[layer_index](z)
-            z = z.reshape(z.shape[0], -1)
+        if self.opt.model.goodness_type == "spatial":
+            sum_of_squares = self.convs[layer_index](z ** 2)
+            logits = torch.mean(sum_of_squares, dim=list(range(1,len(sum_of_squares.shape))))
 
-        sum_of_squares = torch.sum(z ** 2, dim=list(range(1,len(z.shape))))
+            # z = self.convs[layer_index](z)
+            # sum_of_squares = torch.sum(z ** 2, dim=list(range(1,len(z.shape))))
+            # logits = sum_of_squares - (z.reshape(len(z),-1).shape[1] * 0.625)
+            
+        else:
+            if self.opt.model.goodness_type == "avgpool":
+                z = self.avgpools[layer_index](z)
 
-        logits = sum_of_squares - (z.reshape(len(z),-1).shape[1] * 0.625)
-        # logits = sum_of_squares - z.reshape(len(z),-1).shape[1]
+            sum_of_squares = torch.sum(z ** 2, dim=list(range(1,len(z.shape))))
+
+            logits = sum_of_squares - (z.reshape(len(z),-1).shape[1] * 0.625)
+            # logits = sum_of_squares - z.reshape(len(z),-1).shape[1]
+
         ff_loss = self.ff_loss(logits, labels.float())
 
         with torch.no_grad():
@@ -263,12 +294,11 @@ class FF_model(torch.nn.Module):
                 z = block[0](z)
                 # z = self.bn[block_idx](z)
                 z = self.act_fn.apply(z)
-                z = self._layer_norm(z)
+                z = self._layer_norm(z, block_idx)
                 reencode.append(z.clone())
                 encodetype.append("layer")
 
                 if (block_idx+1) < self.opt.model.num_blocks:
-                    # z = self._layer_norm(z)
                     if self.opt.model.convolutional and (block_idx+1) in self.opt.model.conv.pool:
                         z = F.max_pool2d(z, 2, 2)  # maxpool
 
@@ -281,7 +311,7 @@ class FF_model(torch.nn.Module):
                 if layer_idx > 0:
                     # z = self.bn[layer_idx-1](z)
                     z = self.act_fn.apply(z)
-                    z = self._layer_norm(z)
+                    z = self._layer_norm(z, layer_idx-1)
                     redecode.insert(0, z.clone())
                     decodetype.insert(0, "layer")
                 else:
@@ -334,7 +364,7 @@ class FF_model(torch.nn.Module):
 
         if not self.opt.model.convolutional:
             x = x.reshape(x.shape[0], -1)
-        x = self._layer_norm(x)
+        x = self._layer_norm(x, -1)
             
         reconstruction_prev_layer_num = 0
         reconstruction_targets = x.clone()
@@ -405,7 +435,8 @@ class FF_model(torch.nn.Module):
                 x = z.detach()
             else:
                 x = z.clone()
-            x = self._layer_norm(x)
+            x = self._layer_norm(x, block_idx)
+            # print(self.convs[block_idx](x ** 2).shape, self.convs[block_idx](x ** 2))
 
             # forward for one layer, backward for one layer, implement later
             # block_xs.append(x)
@@ -463,7 +494,7 @@ class FF_model(torch.nn.Module):
         z = inputs["original_sample"]
         if not self.opt.model.convolutional:
             z = z.reshape(z.shape[0], -1)
-        z = self._layer_norm(z)
+        z = self._layer_norm(z, -1)
 
         input_classification_model = []
 
@@ -478,7 +509,7 @@ class FF_model(torch.nn.Module):
                 if self.opt.training.downstream_method == "2..n" and block_idx >= 1:
                     input_classification_model.append(z.reshape(z.shape[0], -1))
 
-                z = self._layer_norm(z)
+                z = self._layer_norm(z, block_idx)
 
                 if self.opt.model.convolutional and (block_idx+1) in self.opt.model.conv.pool:
                     z = F.max_pool2d(z, 2, 2)  # maxpool

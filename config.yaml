@@ -20,6 +20,8 @@ model:
   convolutional: True
   num_blocks: 10
   predictor_size: 8192
+  goodness_type: "spatial"  # "flatten", "avgpool", or "spatial"
+  norm_type: "divisive"  # "layer", "channel", or "divisive"
   reconstruction_objectives:
     - 1
     - 2
