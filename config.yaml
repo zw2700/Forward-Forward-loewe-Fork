@@ -8,6 +8,7 @@ input:
   supervised: True
   batch_size: 128
   dataset: CIFAR10
+  augment: "standard"  # "standard", "none", "standard_plus_autoaugment"
   input_width: 32
   input_height: 32
   input_channels: 3
@@ -20,8 +21,9 @@ model:
   convolutional: True
   num_blocks: 10
   predictor_size: 8192
-  goodness_type: "spatial"  # "flatten", "avgpool", or "spatial"
-  norm_type: "divisive"  # "layer", "channel", or "divisive"
+  goodness_type: "spatial"  # "flatten", "avgpool", "spatial", "revised_spatial", "fully_connected"
+  threshold_type: "dynamic" # "fixed", "dynamic", "mean", "mean_detached"
+  norm_type: "layer"  # "layer", "channel", or "divisive"
   reconstruction_objectives:
     - 1
     - 2
@@ -49,6 +51,8 @@ model:
     hidden_dim_10: 125
 
   conv:
+    locally_connected: False
+
     # 3 layers
     # output_size_1: 4
     # output_size_2: 3
@@ -223,7 +227,7 @@ hydra:
 
 wandb:
   activate: False
-  key: 973dbf755f0f765fb4a4b8f552915e484fd4131d
+  # key: 973dbf755f0f765fb4a4b8f552915e484fd4131d
   project: "ff_frank_cifar"
   name: "frank"
   entity: "zw2700"

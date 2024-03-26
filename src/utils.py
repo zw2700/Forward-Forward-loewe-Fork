@@ -34,7 +34,7 @@ def get_model_and_optimizer(opt):
         for p in model.parameters()
         if all(p is not x for x in model.linear_classifier.parameters())
     ]
-    optimizer = torch.optim.SGD(
+    optimizer = torch.optim.Adam(
         [
             {
                 "params": main_model_params,
@@ -114,7 +114,7 @@ def get_CIFAR10_partition(opt, partition):
     test_transform = transforms.Compose([
             transforms.ToImageTensor(),
             transforms.ConvertImageDtype(torch.float32),
-            transforms.Normalize((0.424, 0.415, 0.384), (0.283, 0.278, 0.284)),
+            transforms.Normalize((0.424, 0.415, 0.384), (0.283, 0.278, 0.284)),  # not in original repo?
         ])
     
     if partition == "train":
@@ -125,7 +125,7 @@ def get_CIFAR10_partition(opt, partition):
             transform=train_transform,
         )
     
-    elif partition in ["val"]:
+    elif partition == "val":
         cifar10 = torchvision.datasets.CIFAR10(
             os.path.join(get_original_cwd(), opt.input.path),
             train=False,
